@@ -1,0 +1,22 @@
+{
+  "name": "chzzkrecorder",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "npx ts-node ./src/index.ts",
+    "start": "tsc && node dist/index"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@tsconfig/node18": "^18.2.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
+  },
+  "dependencies": {
+    "chalk": "^5.3.0",
+    "chzzk": "^1.4.1"
+  }
+}
