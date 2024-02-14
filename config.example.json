@@ -1,0 +1,5 @@
+{
+  "checkIntervalSec": 30,
+  "filenameTemplate": "{username}_{id}_chzzk_{year}{month}{day}_{hr}{min}{sec}",
+  "saveDirectory": "D:\\Path\\to\\folder"
+}

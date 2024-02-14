@@ -2,9 +2,11 @@
   "name": "chzzkrecorder",
   "version": "1.0.0",
   "description": "",
+  "type": "module",
   "main": "index.js",
   "scripts": {
-    "dev": "npx ts-node ./src/index.ts",
+    "dev": "npx ts-node-esm ./src/index.ts",
+    "add": "npx ts-node-esm ./src/addUser.ts",
     "start": "tsc && node dist/index"
   },
   "keywords": [],
