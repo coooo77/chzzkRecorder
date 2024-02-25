@@ -2,6 +2,8 @@ node_modules
 package-lock.json
 config.json
 addList.json
+vodList.json
+vodDownloadList.json
 dist
 modal
 videos

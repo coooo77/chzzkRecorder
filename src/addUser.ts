@@ -17,8 +17,12 @@ const main = async () => {
     const chzzk = new ChzzkClient()
 
     const userListPath = path.resolve(__dirname, '..', 'addList.json')
-    const newUserListJson = fs.readFileSync(userListPath, 'utf8')
-    const newUserList = JSON.parse(newUserListJson) as Record<string, string>
+    const newUserList = fileSys.getJSONFile<Record<string, string>>(userListPath)
+
+    if (!newUserList) {
+      helper.msg('No add list found, process close')
+      return
+    }
 
     const userList = fileSys.getUsersList()
 

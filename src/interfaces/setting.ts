@@ -3,6 +3,7 @@
 export interface AppSettings {
   checkIntervalSec: number
   filenameTemplate: string
+  filenameVodTemplate: string
   saveDirectory: string
 }
 
@@ -20,6 +21,17 @@ export interface OnlineUser {
   username: string
   controllable: boolean
   channelName: UserSetting['channelName']
+}
+
+export interface VodDownloadItem {
+  pid?: number
+  publishDate: string
+  username: string
+  channelId: string
+  vodNum: number
+  vodUrl: string
+  duration: number
+  finish: boolean
 }
 
 export type UsersList = Record<UserSetting['channelId'], UserSetting>
