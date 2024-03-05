@@ -1,5 +1,5 @@
 {
-  "name": "chzzkrecorder",
+  "name": "chzzk-recorder",
   "version": "1.0.0",
   "description": "",
   "type": "module",
@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "npx ts-node-esm ./src/index.ts",
     "add": "npx ts-node-esm ./src/addUser.ts",
+    "sort": "npx ts-node-esm ./src/sortAddList.ts",
     "vod": "npx ts-node-esm ./src/downloadVod.ts",
     "start": "tsc && node dist/index"
   },
