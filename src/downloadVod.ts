@@ -2,7 +2,6 @@
 
 import path from 'path'
 import cp from 'child_process'
-import { ChzzkClient } from 'chzzk'
 import { fileURLToPath } from 'node:url'
 
 import helper from './utils/common.js'
@@ -38,11 +37,13 @@ const getFilename = (item: VodDownloadItem, targetTime: Date) => {
     .replace('{id}', channelId)
 }
 
-const getCmd = (item: VodDownloadItem) => {
+const getFilePath = (item: VodDownloadItem) => {
   const fileName = getFilename(item, new Date(item.publishDate))
   const filePath = path.join(appSetting.saveDirectory, `${fileName}.ts`)
-  return `streamlink ${item.vodUrl} best -o ${filePath}`
+  return filePath
 }
+
+const getCmd = (item: VodDownloadItem) => `streamlink ${item.vodUrl} best -o ${getFilePath(item)}`
 
 const recordVod = (item: VodDownloadItem) =>
   new Promise<void>((res, rej) => {
@@ -62,11 +63,17 @@ const recordVod = (item: VodDownloadItem) =>
         fileSys.saveJSONFile(vodDownloadListPath, vodDownloadList)
       }
 
-      const closeFn = () => {
-        helper.msg(`vod ${item.vodUrl} downloaded successfully`, 'success')
-
+      const closeFn = async () => {
+        helper.msg(`vod ${item.vodUrl} downloaded`)
         vodDownloadList[item.vodNum].finish = true
+
+        const fileDuration = await getMediaDuration(getFilePath(item), true)
+        vodDownloadList[item.vodNum].isSuccess = item.duration - fileDuration <= 60 * 2
         fileSys.saveJSONFile(vodDownloadListPath, vodDownloadList)
+
+        if (!vodDownloadList[item.vodNum].isSuccess) {
+          helper.msg(`Failed to download vod ${item.vodNum}`)
+        }
 
         task?.off('spawn', spawnFn)
         task?.off('close', closeFn)
@@ -97,6 +104,7 @@ const getVodItem = async (vodNum: number): Promise<VodDownloadItem | null> => {
     return {
       vodNum,
       finish: false,
+      isSuccess: false,
       duration: vod.duration,
       publishDate: vod.publishDate,
       username: userSetting.username,
@@ -107,6 +115,19 @@ const getVodItem = async (vodNum: number): Promise<VodDownloadItem | null> => {
     helper.msg(`fetch failed, vodNum: ${vodNum}`, 'fail')
     return null
   }
+}
+
+type GetMediaDuration4Result<T extends boolean> = T extends true ? number : string
+const getMediaDuration = <T extends boolean = true>(videoPath: string, showInSeconds: T): GetMediaDuration4Result<T> => {
+  let command = `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1`
+  if (!showInSeconds) {
+    command += ` -sexagesimal`
+  }
+  command += ` ${videoPath}`
+
+  const stdout = cp.execSync(command).toString()
+
+  return showInSeconds ? (parseFloat(stdout) as GetMediaDuration4Result<T>) : (stdout as GetMediaDuration4Result<T>)
 }
 
 const main = async () => {
@@ -123,7 +144,12 @@ const main = async () => {
     await recordVod(item)
   }
 
-  helper.msg('Download Vod Successfully', 'success')
+  const failList = Object.values(vodDownloadList).filter((i) => !i.isSuccess)
+  if (failList.length) {
+    failList.forEach((i) => helper.msg(`Failed to download vod ${i.vodNum}`))
+  } else {
+    helper.msg('Download Vod Successfully', 'success')
+  }
 }
 
 main()

@@ -32,6 +32,7 @@ export interface VodDownloadItem {
   vodUrl: string
   duration: number
   finish: boolean
+  isSuccess: boolean
 }
 
 export type UsersList = Record<UserSetting['channelId'], UserSetting>
