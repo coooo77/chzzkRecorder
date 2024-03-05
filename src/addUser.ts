@@ -1,6 +1,5 @@
 'use strict'
 
-import fs from 'fs'
 import path from 'path'
 import { ChzzkClient } from 'chzzk'
 import { fileURLToPath } from 'node:url'
@@ -37,8 +36,8 @@ const main = async () => {
         username,
         channelId,
         channelName: res.channelName,
-        disableRecord: false,
-        allowCategory: ['Live_Art'],
+        disableRecord: true,
+        allowCategory: ['Live_Art', 'art'],
       }
 
       helper.msg(`User ${username} added`)
