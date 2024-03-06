@@ -24,7 +24,7 @@ const userList = fileSys.getUsersList()
 const appSetting = fileSys.getAppSetting()
 
 const vodDownloadListPath = path.resolve(__dirname, '..', 'vodDownloadList.json')
-const vodDownloadList: Record<number, VodDownloadItem> = {}
+let vodDownloadList: Record<number, VodDownloadItem> = {}
 
 const getFilename = (item: VodDownloadItem, targetTime: Date) => {
   const { username, channelId, vodNum, duration } = item
@@ -113,6 +113,7 @@ const getVodItem = async (vodNum: number): Promise<VodDownloadItem | null> => {
     }
   } catch (error) {
     helper.msg(`fetch failed, vodNum: ${vodNum}`, 'fail')
+    console.error(error)
     return null
   }
 }
@@ -130,19 +131,18 @@ const getMediaDuration = <T extends boolean = true>(videoPath: string, showInSec
   return showInSeconds ? (parseFloat(stdout) as GetMediaDuration4Result<T>) : (stdout as GetMediaDuration4Result<T>)
 }
 
+const reduceGetVodItems = (vodList: number[]) =>
+  vodList.reduce((acc, vodId) => acc.then(() => getVodItem(vodId)), Promise.resolve() as Promise<unknown>) as Promise<(VodDownloadItem | null)[]>
+
 const main = async () => {
   helper.msg('Start DownloadVod')
 
-  for (const vodNum of vodList) {
-    const item = await getVodItem(vodNum)
+  vodDownloadList = fileSys.getJSONFile(vodDownloadListPath) || {}
+  const items = Object.values(vodDownloadList)
+  const vodItems = items.length !== 0 ? items : await reduceGetVodItems(vodList)
+  const downloadItems = vodItems.filter((v): v is VodDownloadItem => Boolean(v))
 
-    if (!item) {
-      helper.msg(`Can not find vod by vod id ${vodNum}`, 'warn')
-      continue
-    }
-
-    await recordVod(item)
-  }
+  await downloadItems.reduce((acc, item) => acc.then(() => recordVod(item)), Promise.resolve())
 
   const failList = Object.values(vodDownloadList).filter((i) => !i.isSuccess)
   if (failList.length) {
