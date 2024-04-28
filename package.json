@@ -7,6 +7,8 @@
   "scripts": {
     "dev": "npx ts-node-esm ./src/index.ts",
     "add": "npx ts-node-esm ./src/addUser.ts",
+    "toVod": "npx ts-node-esm ./src/toVodItems.ts",
+    "batch": "",
     "sort": "npx ts-node-esm ./src/sortAddList.ts",
     "vod": "npx ts-node-esm ./src/downloadVod.ts",
     "start": "tsc && node dist/index"
@@ -21,6 +23,8 @@
   },
   "dependencies": {
     "chalk": "^5.3.0",
-    "chzzk": "^1.4.1"
+    "chzzk": "^1.8.0",
+    "puppeteer": "^22.5.0",
+    "puppeteer-extra": "^3.3.6"
   }
 }

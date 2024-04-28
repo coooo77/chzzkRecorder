@@ -6,15 +6,18 @@ import { fileURLToPath } from 'node:url'
 
 import helper from './utils/common.js'
 import fileSys from './utils/fileSys.js'
+import Puppeteer from './utils/puppeteer.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 const main = async () => {
+  const chzzk = new ChzzkClient()
+  const puppeteer = new Puppeteer()
+
   try {
     helper.msg('Start to add Users')
 
-    const chzzk = new ChzzkClient()
-
+    const appSetting = fileSys.getAppSetting()
     const userListPath = path.resolve(__dirname, '..', 'addList.json')
     const newUserList = fileSys.getJSONFile<Record<string, string>>(userListPath)
 
@@ -23,6 +26,8 @@ const main = async () => {
       return
     }
 
+    const fetchFn = appSetting.usePuppeteer ? puppeteer.getChannel.bind(puppeteer) : chzzk.channel.bind(chzzk)
+
     const userList = fileSys.getUsersList()
 
     let count = 0
@@ -30,7 +35,7 @@ const main = async () => {
     for (const [channelId, username] of Object.entries(newUserList)) {
       if (userList[channelId]) continue
 
-      const res = await chzzk.channel(channelId)
+      const res = await fetchFn(channelId)
 
       userList[channelId] = {
         username,
@@ -59,6 +64,8 @@ const main = async () => {
     helper.msg('Failed to add users', 'error')
 
     console.error(error)
+  } finally {
+    await puppeteer.close()
   }
 }
 

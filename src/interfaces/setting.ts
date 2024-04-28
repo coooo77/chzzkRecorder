@@ -1,10 +1,18 @@
 'use strict'
 
+export interface PuppeteerSetting {
+  headless: boolean
+  executablePath: string
+}
+
 export interface AppSettings {
   checkIntervalSec: number
   filenameTemplate: string
   filenameVodTemplate: string
   saveDirectory: string
+  // use puppeteer to add、download vod
+  usePuppeteer?: boolean
+  puppeteerSettings?: PuppeteerSetting
 }
 
 export interface UserSetting {
@@ -33,6 +41,7 @@ export interface VodDownloadItem {
   duration: number
   finish: boolean
   isSuccess: boolean
+  tryCount: number
 }
 
 export type UsersList = Record<UserSetting['channelId'], UserSetting>

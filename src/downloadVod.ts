@@ -1,15 +1,18 @@
 'use strict'
 
+import fs from 'fs'
 import path from 'path'
 import cp from 'child_process'
 import { fileURLToPath } from 'node:url'
 
 import helper from './utils/common.js'
 import fileSys from './utils/fileSys.js'
+import Puppeteer from './utils/puppeteer.js'
 
 import type { Video } from 'chzzk'
 import type { VodDownloadItem } from './interfaces/index.js'
 
+const MAX_RETRY_COUNT = 3
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 const vodListPath = path.resolve(__dirname, '..', 'vodList.json')
@@ -19,6 +22,8 @@ if (!vodList) {
   helper.msg('No vod list found, process close')
   process.exit(0)
 }
+
+const puppeteer = new Puppeteer()
 
 const userList = fileSys.getUsersList()
 const appSetting = fileSys.getAppSetting()
@@ -43,7 +48,7 @@ const getFilePath = (item: VodDownloadItem) => {
   return filePath
 }
 
-const getCmd = (item: VodDownloadItem) => `streamlink ${item.vodUrl} best -o ${getFilePath(item)}`
+const getCmd = (item: VodDownloadItem) => `streamlink ${item.vodUrl} best -f -o ${getFilePath(item)}`
 
 const recordVod = (item: VodDownloadItem) =>
   new Promise<void>((res, rej) => {
@@ -65,15 +70,27 @@ const recordVod = (item: VodDownloadItem) =>
 
       const closeFn = async () => {
         helper.msg(`vod ${item.vodUrl} downloaded`)
-        vodDownloadList[item.vodNum].finish = true
 
-        const fileDuration = await getMediaDuration(getFilePath(item), true)
-        vodDownloadList[item.vodNum].isSuccess = item.duration - fileDuration <= 60 * 2
-        fileSys.saveJSONFile(vodDownloadListPath, vodDownloadList)
+        const vod = vodDownloadList[item.vodNum]
+        vod.tryCount++
+        vod.finish = vod.tryCount >= MAX_RETRY_COUNT
 
-        if (!vodDownloadList[item.vodNum].isSuccess) {
+        const filePath = getFilePath(item)
+        if (!fs.existsSync(filePath)) {
+          helper.msg(`can not find vod ${item.vodUrl} to check duration!`, 'error')
+          vod.finish = true
+        } else {
+          const fileDuration = await getMediaDuration(filePath, true)
+          const isSuccess = item.duration - fileDuration <= 60 * 2
+          vod.finish = isSuccess
+          vod.isSuccess = isSuccess
+        }
+
+        if (!vod.isSuccess) {
           helper.msg(`Failed to download vod ${item.vodNum}`)
         }
+
+        fileSys.saveJSONFile(vodDownloadListPath, vodDownloadList)
 
         task?.off('spawn', spawnFn)
         task?.off('close', closeFn)
@@ -90,12 +107,18 @@ const recordVod = (item: VodDownloadItem) =>
     }
   })
 
+const getVod = async (vodNum: number) => {
+  const res = await fetch(`https://api.chzzk.naver.com/service/v2/videos/${vodNum}`)
+  const json = (await res.json()) as { content?: Video }
+  const vod = json['content'] ?? null
+  return vod
+}
+
+const fetchFn = appSetting.usePuppeteer ? puppeteer.getVodData.bind(puppeteer) : getVod
+
 const getVodItem = async (vodNum: number): Promise<VodDownloadItem | null> => {
   try {
-    const res = await fetch(`https://api.chzzk.naver.com/service/v2/videos/${vodNum}`)
-    const json = (await res.json()) as { content?: Video }
-    const vod = json['content'] ?? null
-
+    const vod = await fetchFn(vodNum)
     if (!vod) return null
 
     const userSetting = userList[vod.channel.channelId]
@@ -103,6 +126,7 @@ const getVodItem = async (vodNum: number): Promise<VodDownloadItem | null> => {
 
     return {
       vodNum,
+      tryCount: 0,
       finish: false,
       isSuccess: false,
       duration: vod.duration,
@@ -118,8 +142,9 @@ const getVodItem = async (vodNum: number): Promise<VodDownloadItem | null> => {
   }
 }
 
-type GetMediaDuration4Result<T extends boolean> = T extends true ? number : string
-const getMediaDuration = <T extends boolean = true>(videoPath: string, showInSeconds: T): GetMediaDuration4Result<T> => {
+function getMediaDuration(videoPath: string, showInSeconds: true): number
+function getMediaDuration(videoPath: string, showInSeconds: false): string
+function getMediaDuration(videoPath: string, showInSeconds: boolean) {
   let command = `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1`
   if (!showInSeconds) {
     command += ` -sexagesimal`
@@ -128,21 +153,35 @@ const getMediaDuration = <T extends boolean = true>(videoPath: string, showInSec
 
   const stdout = cp.execSync(command).toString()
 
-  return showInSeconds ? (parseFloat(stdout) as GetMediaDuration4Result<T>) : (stdout as GetMediaDuration4Result<T>)
+  return showInSeconds ? parseFloat(stdout) : stdout
 }
 
-const reduceGetVodItems = (vodList: number[]) =>
-  vodList.reduce((acc, vodId) => acc.then(() => getVodItem(vodId)), Promise.resolve() as Promise<unknown>) as Promise<(VodDownloadItem | null)[]>
+const reduceGetVodItems = async (vodList: number[]) => {
+  const result = []
+
+  for (const vodId of vodList) {
+    const res = await getVodItem(vodId)
+    if (res) result.push(res)
+  }
+
+  return result
+}
 
 const main = async () => {
   helper.msg('Start DownloadVod')
 
-  vodDownloadList = fileSys.getJSONFile(vodDownloadListPath) || {}
-  const items = Object.values(vodDownloadList)
-  const vodItems = items.length !== 0 ? items : await reduceGetVodItems(vodList)
-  const downloadItems = vodItems.filter((v): v is VodDownloadItem => Boolean(v))
+  const vodItems = await reduceGetVodItems(vodList)
 
-  await downloadItems.reduce((acc, item) => acc.then(() => recordVod(item)), Promise.resolve())
+  if (puppeteer.isInit) puppeteer.close()
+
+  for (const item of vodItems) {
+    let isProcessing = true
+
+    do {
+      await recordVod(item)
+      isProcessing = !vodDownloadList[item.vodNum].finish
+    } while (isProcessing)
+  }
 
   const failList = Object.values(vodDownloadList).filter((i) => !i.isSuccess)
   if (failList.length) {
