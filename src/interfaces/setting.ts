@@ -42,6 +42,7 @@ export interface VodDownloadItem {
   finish: boolean
   isSuccess: boolean
   tryCount: number
+  adult: boolean
 }
 
 export type UsersList = Record<UserSetting['channelId'], UserSetting>

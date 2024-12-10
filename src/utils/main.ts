@@ -7,12 +7,13 @@ import { ChzzkClient } from 'chzzk'
 import helper from './common.js'
 import fileSys from './fileSys.js'
 
-import type { LiveStatus, Live } from 'chzzk'
+import type { Live, LiveDetail } from 'chzzk'
 import type { RecordingList, UserSetting } from '../interfaces/index.js'
 
 interface RecordItem {
   channelId: string
   adult: boolean
+  liveId: number
 }
 
 interface ErrorItem {
@@ -51,7 +52,7 @@ export default class Main {
   async getOnlineUsers() {
     const channelIds = Object.keys(this.userList)
 
-    const userStatus = new Map<string, LiveStatus>()
+    const userDetail = new Map<string, LiveDetail>()
 
     for (const channelId of channelIds) {
       try {
@@ -64,7 +65,7 @@ export default class Main {
 
         const user = this.userList[channelId]
 
-        const res = await this.chzzk.live.status(channelId)
+        const res = await this.chzzk.live.detail(channelId)
 
         await helper.wait(5)
 
@@ -81,7 +82,7 @@ export default class Main {
           continue
         }
 
-        userStatus.set(channelId, res)
+        userDetail.set(channelId, res)
       } catch (error) {
         const err = error as ErrorItem
 
@@ -94,21 +95,21 @@ export default class Main {
       }
     }
 
-    return userStatus
+    return userDetail
   }
 
-  getFilename(setting: UserSetting, targetTime: Date = new Date()) {
-    const template = helper.formatDate(this.appSetting.filenameTemplate, targetTime)
+  getFilename(setting: UserSetting, liveId: number) {
+    const template = helper.formatDate(this.appSetting.filenameTemplate, new Date())
 
-    return template.replace('{username}', setting.username).replace('{id}', setting.channelId)
+    return template.replace('{username}', setting.username).replace('{id}', setting.channelId).replace('{liveNum}', `${liveId}`)
   }
 
   getSourceUrl(channelId: string) {
     return `https://chzzk.naver.com/live/${channelId}`
   }
 
-  getStreamlinkCmd(setting: UserSetting) {
-    const filePath = path.join(this.appSetting.saveDirectory, `${this.getFilename(setting)}.ts`)
+  getStreamlinkCmd(setting: UserSetting, liveId: number) {
+    const filePath = path.join(this.appSetting.saveDirectory, `${this.getFilename(setting, liveId)}.ts`)
     const sourceUrl = this.getSourceUrl(setting.channelId)
     return `streamlink ${sourceUrl} best -o ${filePath}`
   }
@@ -147,8 +148,8 @@ export default class Main {
     task.on('close', closeFn)
   }
 
-  streamLinkRecord(setting: UserSetting) {
-    const cmd = this.getStreamlinkCmd(setting)
+  streamLinkRecord(setting: UserSetting, liveId: number) {
+    const cmd = this.getStreamlinkCmd(setting, liveId)
 
     this.record(setting, cmd)
   }
@@ -175,8 +176,8 @@ export default class Main {
     this.recordingList = list
   }
 
-  getFfmpegCmd(setting: UserSetting, m3u8: string) {
-    const filePath = path.join(this.appSetting.saveDirectory, `${this.getFilename(setting)}.ts`)
+  getFfmpegCmd(setting: UserSetting, m3u8: string, liveId: number) {
+    const filePath = path.join(this.appSetting.saveDirectory, `${this.getFilename(setting, liveId)}.ts`)
     return `ffmpeg -i ${m3u8} -y -c copy ${filePath}`
   }
 
@@ -188,7 +189,7 @@ export default class Main {
       const hls = liveDetail.livePlayback.media.find((m) => m.mediaId === 'HLS')
       if (!hls) throw Error(`no hls source for streamer ${setting.username}`)
 
-      const cmd = this.getFfmpegCmd(setting, hls.path)
+      const cmd = this.getFfmpegCmd(setting, hls.path, liveDetail.liveId)
 
       this.record(setting, cmd)
     } catch (error) {
@@ -250,14 +251,15 @@ export default class Main {
   }
 
   async searchUsersById() {
-    const userStatus = await this.getOnlineUsers()
+    const userDetails = await this.getOnlineUsers()
 
-    const items = Array.from(userStatus).map(([channelId, status]) => ({
+    const items = Array.from(userDetails).map(([channelId, detail]) => ({
       channelId,
-      adult: status.adult,
+      adult: detail.adult,
+      liveId: detail.liveId,
     }))
 
-    this.recordUSerByAdult(items)
+    this.recordUserByAdult(items)
   }
 
   async searchUSers() {
@@ -282,23 +284,24 @@ export default class Main {
       }
 
       if (user.disableRecord) {
-        helper.msg(`Can not record ${user.username}'s live stream due to configuration`)
+        helper.msg(`Can not record ${user.username}'s live stream due to configuration at ${this.getSourceUrl(channelId)}`)
         continue
       }
 
       userToRecord.set(channelId, live)
     }
 
-    const items = Array.from(userToRecord).map(([channelId, status]) => ({
+    const items = Array.from(userToRecord).map(([channelId, detail]) => ({
       channelId,
-      adult: status.adult,
+      adult: detail.adult,
+      liveId: detail.liveId,
     }))
 
-    this.recordUSerByAdult(items)
+    this.recordUserByAdult(items)
   }
 
-  recordUSerByAdult(items: RecordItem[]) {
-    for (const { adult, channelId } of items) {
+  recordUserByAdult(items: RecordItem[]) {
+    for (const { adult, channelId, liveId } of items) {
       const user = this.userList[channelId]
 
       // const method = adult ? this.ffmpegRecord.bind(this) : this.streamLinkRecord.bind(this)
@@ -309,7 +312,7 @@ export default class Main {
         continue
       }
 
-      this.streamLinkRecord(user)
+      this.streamLinkRecord(user, liveId)
     }
   }
 
