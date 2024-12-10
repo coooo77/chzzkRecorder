@@ -12,6 +12,8 @@ export interface AppSettings {
   saveDirectory: string
   // use puppeteer to add、download vod
   usePuppeteer?: boolean
+  // use ffmpeg to download live stream
+  useLiveFFmpegOutput?: boolean
   puppeteerSettings?: PuppeteerSetting
 }
 

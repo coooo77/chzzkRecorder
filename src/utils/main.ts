@@ -111,7 +111,8 @@ export default class Main {
   getStreamlinkCmd(setting: UserSetting, liveId: number) {
     const filePath = path.join(this.appSetting.saveDirectory, `${this.getFilename(setting, liveId)}.ts`)
     const sourceUrl = this.getSourceUrl(setting.channelId)
-    return `streamlink ${sourceUrl} best -o ${filePath}`
+    const output = this.appSetting.useLiveFFmpegOutput ? `-O | ffmpeg -i pipe:0 -c copy` : `-o`
+    return `streamlink ${sourceUrl} best ${output} ${filePath}`
   }
 
   record(setting: UserSetting, cmd: string) {
