@@ -121,7 +121,7 @@ export default class Main {
       return
     }
 
-    let task: null | cp.ChildProcess = cp.spawn(cmd, [], {
+    let task: null | cp.ChildProcess = cp.spawn(`start cmd.exe /k "${cmd}"`, [], {
       detached: true,
       shell: true,
     })
