@@ -9,8 +9,7 @@ import helper from './utils/common.js'
 import fileSys from './utils/fileSys.js'
 import Puppeteer from './utils/puppeteer.js'
 
-import type { Video } from 'chzzk'
-import type { VodDownloadItem } from './interfaces/index.js'
+import type { VodDownloadItem, VideoWithIsAdult } from './interfaces/index.js'
 
 const MAX_RETRY_COUNT = 3
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -29,7 +28,7 @@ const userList = fileSys.getUsersList()
 const appSetting = fileSys.getAppSetting()
 
 const vodDownloadListPath = path.resolve(__dirname, '..', 'vodDownloadList.json')
-let vodDownloadList: Record<number, VodDownloadItem> = {}
+const vodDownloadList: Record<number, VodDownloadItem> = {}
 
 const getFilename = (item: VodDownloadItem, targetTime: Date) => {
   const { username, channelId, vodNum, duration } = item
@@ -109,7 +108,7 @@ const recordVod = (item: VodDownloadItem) =>
 
 const getVod = async (vodNum: number) => {
   const res = await fetch(`https://api.chzzk.naver.com/service/v2/videos/${vodNum}`)
-  const json = (await res.json()) as { content?: Video }
+  const json = (await res.json()) as { content?: VideoWithIsAdult }
   const vod = json['content'] ?? null
   return vod
 }
@@ -122,17 +121,18 @@ const getVodItem = async (vodNum: number): Promise<VodDownloadItem | null> => {
     if (!vod) return null
 
     const userSetting = userList[vod.channel.channelId]
-    if (!userSetting) throw Error(`Can not find user by vod id ${vodNum}`)
+    // if (!userSetting) throw Error(`Can not find user by vod id ${vodNum}`)
 
     return {
       vodNum,
       tryCount: 0,
       finish: false,
+      adult: vod.adult,
       isSuccess: false,
       duration: vod.duration,
       publishDate: vod.publishDate,
-      username: userSetting.username,
       channelId: vod.channel.channelId,
+      username: userSetting?.username || 'unknown_user',
       vodUrl: `https://chzzk.naver.com/video/${vodNum}`,
     }
   } catch (error) {

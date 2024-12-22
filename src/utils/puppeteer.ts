@@ -3,9 +3,9 @@ import puppeteer from 'puppeteer-extra'
 
 import fileSys from './fileSys.js'
 
-import type { Channel, Video } from 'chzzk'
+import type { Channel } from 'chzzk'
 import type { Browser, Page } from 'puppeteer'
-import type { PuppeteerSetting } from '../interfaces/index.js'
+import type { PuppeteerSetting, VideoWithIsAdult } from '../interfaces/index.js'
 
 export default class Puppeteer {
   isInit = false
@@ -71,7 +71,7 @@ export default class Puppeteer {
 
   async getVodData(vodNum: number) {
     const url = this.getReqVodUrl(vodNum)
-    const res = await this.puppeteerFetch<Video>(url)
+    const res = await this.puppeteerFetch<VideoWithIsAdult>(url)
     return res
   }
 }
