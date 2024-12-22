@@ -2,7 +2,6 @@
 
 import fs from 'fs'
 import path from 'path'
-import { fileURLToPath } from 'url'
 import { AppSettings, RecordingList, UsersList } from '../interfaces/index.js'
 
 export default {

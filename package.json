@@ -7,8 +7,6 @@
   "scripts": {
     "dev": "npx ts-node-esm ./src/index.ts",
     "add": "npx ts-node-esm ./src/addUser.ts",
-    "toVod": "npx ts-node-esm ./src/toVodItems.ts",
-    "batch": "",
     "sort": "npx ts-node-esm ./src/sortAddList.ts",
     "vod": "npx ts-node-esm ./src/downloadVod.ts",
     "start": "tsc && node dist/index"
