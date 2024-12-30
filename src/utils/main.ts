@@ -31,15 +31,15 @@ const failMsg = ['ENOTFOUND', 'fetch failed']
 export default class Main {
   api: Api
   model: Model
-  record: Recorder
+  recorder: Recorder
 
   SUB_PROCESS_LOOP_TIME = 5 * 60
   SUB_PROCESS_API_REQUEST_TIME = 5 * 3
 
-  constructor({ api, model, recorder: record }: MainParams) {
+  constructor({ api, model, recorder }: MainParams) {
     this.api = api
     this.model = model
-    this.record = record
+    this.recorder = recorder
   }
 
   //#region 斷線處理
@@ -110,7 +110,7 @@ export default class Main {
       return acc
     }, [] as [Live, UserSetting][])
 
-    livesToRecord.forEach((payload) => this.record.emit(RecordEvent.RECORD_LIVE, ...payload))
+    livesToRecord.forEach((payload) => this.recorder.emit(RecordEvent.RECORD_LIVE, ...payload))
   }
 
   async mainProcess() {
@@ -185,7 +185,7 @@ export default class Main {
       }
     }
 
-    livesToRecord.forEach((payload) => this.record.emit(RecordEvent.RECORD_LIVE, ...payload))
+    livesToRecord.forEach((payload) => this.recorder.emit(RecordEvent.RECORD_LIVE, ...payload))
   }
 
   async subProcess() {
