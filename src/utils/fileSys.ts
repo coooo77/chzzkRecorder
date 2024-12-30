@@ -27,9 +27,8 @@ const fileSysOri = {
   //#endregion
 
   //#region 通用資料
-  async getUsersList(options?: { init: boolean }) {
+  async getUsersList() {
     const model = await this.getOrDefaultValue<UsersList>(this.usersListPath, {})
-    if (options?.init) await this.saveJSONFile(this.usersListPath, model)
     return model
   },
 

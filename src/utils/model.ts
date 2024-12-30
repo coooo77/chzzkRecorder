@@ -133,7 +133,7 @@ export default class Model extends EventEmitter<ModelEventMap> {
   }
 
   async initUserList() {
-    this.userList = await fileSys.getUsersList({ init: true })
+    this.userList = await fileSys.getUsersList()
   }
   //#endregion
 }
