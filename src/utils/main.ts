@@ -1,384 +1,191 @@
 'use strict'
+// 外部方法
+import { cloneDeep } from 'lodash-es'
 
-import path from 'path'
-import cp from 'child_process'
-import { ChzzkClient } from 'chzzk'
-
+// 內部方法
 import helper from './common.js'
-import fileSys from './fileSys.js'
+import { RecordEvent } from './recorder.js'
 
+// Class
+import Api from './api.js'
+import Model from './model.js'
+import Recorder from './recorder.js'
+
+// 型別
 import type { Live, LiveDetail } from 'chzzk'
-import type { RecordingList, UserSetting } from '../interfaces/index.js'
-
-interface RecordItem {
-  channelId: string
-  adult: boolean
-  liveId: number
-}
+import type { RecordingList, UserSetting } from '../interfaces/setting.js'
 
 interface ErrorItem {
   cause?: Error
   message?: string
 }
 
+interface MainParams {
+  api: Api
+  model: Model
+  recorder: Recorder
+}
+
 const failMsg = ['ENOTFOUND', 'fetch failed']
 
-const searchTag = ['라이브 아트', '아트']
-
 export default class Main {
-  chzzk: ChzzkClient
+  api: Api
+  model: Model
+  record: Recorder
 
-  constructor(arg?: ConstructorParameters<typeof ChzzkClient>) {
-    const value = arg || []
-    this.chzzk = new ChzzkClient(...value)
+  SUB_PROCESS_LOOP_TIME = 5 * 60
+  SUB_PROCESS_API_REQUEST_TIME = 5 * 3
+
+  constructor({ api, model, recorder: record }: MainParams) {
+    this.api = api
+    this.model = model
+    this.record = record
   }
 
-  appSetting = fileSys.getAppSetting()
-
-  userList = fileSys.getUsersList()
-
-  _recordingList?: RecordingList
-
-  get recordingList() {
-    if (!this._recordingList) this._recordingList = fileSys.getRecordingList()
-    return this._recordingList
-  }
-
-  set recordingList(list) {
-    this._recordingList = list
-    fileSys.saveJSONFile(fileSys.recordingListPath, list)
-  }
-
-  async getOnlineUsers() {
-    const channelIds = Object.keys(this.userList)
-
-    const userDetail = new Map<string, LiveDetail>()
-
-    for (const channelId of channelIds) {
-      try {
-        const recordingUser = this.recordingList[channelId]
-
-        if (recordingUser) {
-          helper.msg(`Recording User ${recordingUser.username} at ${this.getSourceUrl(channelId)}`)
-          continue
-        }
-
-        const user = this.userList[channelId]
-
-        const res = await this.chzzk.live.detail(channelId)
-
-        await helper.wait(5)
-
-        // TODO: verified account can watch adult content
-        if (!res || res.status === 'CLOSE') continue
-
-        if (user.disableRecord) {
-          helper.msg(`User ${user.username}'s record stopped due to configuration`)
-          continue
-        }
-
-        if (this.isInvalidLiveCategory(user.allowCategory, res.liveCategory)) {
-          helper.msg(`User ${user.username}'s record stopped due to Invalid Category ${res.liveCategory} `)
-          continue
-        }
-
-        userDetail.set(channelId, res)
-      } catch (error) {
-        const err = error as ErrorItem
-
-        const errors = [err?.message, err.cause?.message].filter((e): e is string => Boolean(e))
-        if (errors.some((err) => failMsg.includes(err))) {
-          continue
-        }
-
-        console.error(error)
-      }
-    }
-
-    return userDetail
-  }
-
-  getFilename(setting: UserSetting, liveId: number) {
-    const template = helper.formatDate(this.appSetting.filenameTemplate, new Date())
-
-    return template.replace('{username}', setting.username).replace('{id}', setting.channelId).replace('{liveNum}', `${liveId}`)
-  }
-
-  getSourceUrl(channelId: string) {
-    return `https://chzzk.naver.com/live/${channelId}`
-  }
-
-  getStreamlinkCmd(setting: UserSetting, liveId: number) {
-    const filePath = path.join(this.appSetting.saveDirectory, `${this.getFilename(setting, liveId)}.ts`)
-    const sourceUrl = this.getSourceUrl(setting.channelId)
-    const output = this.appSetting.useLiveFFmpegOutput ? `-O | ffmpeg -i pipe:0 -c copy` : `-o`
-    return `streamlink ${sourceUrl} best ${output} ${filePath}`
-  }
-
-  record(setting: UserSetting, cmd: string) {
-    if (this.recordingList[setting.channelId]) {
-      helper.msg(`user ${setting.username} is recording, abort record process`, 'warn')
-      return
-    }
-
-    let task: null | cp.ChildProcess = cp.spawn(`start cmd.exe /c "${cmd}"`, [], {
-      detached: true,
-      shell: true,
-    })
-
-    const spawnFn = () => {
-      helper.msg(`start to record user ${setting.username}`)
-
-      this.addRecordList(setting, task?.pid)
-    }
-
-    const closeFn = () => {
-      helper.msg(`user ${setting.username} is offline`)
-
-      task?.off('spawn', spawnFn)
-
-      task?.off('close', closeFn)
-
-      task = null
-
-      this.removeRecordList(setting)
-    }
-
-    task.on('spawn', spawnFn)
-
-    task.on('close', closeFn)
-  }
-
-  streamLinkRecord(setting: UserSetting, liveId: number) {
-    const cmd = this.getStreamlinkCmd(setting, liveId)
-
-    this.record(setting, cmd)
-  }
-
-  removeRecordList(setting: UserSetting) {
-    const list = this.recordingList
-
-    delete list[setting.channelId]
-
-    this.recordingList = list
-  }
-
-  addRecordList(setting: UserSetting, pid?: number) {
-    const list = this.recordingList
-
-    list[setting.channelId] = {
-      pid,
-      startAt: new Date().toJSON(),
-      username: setting.username,
-      controllable: true,
-      channelName: setting.channelName,
-    }
-
-    this.recordingList = list
-  }
-
-  getFfmpegCmd(setting: UserSetting, m3u8: string, liveId: number) {
-    const filePath = path.join(this.appSetting.saveDirectory, `${this.getFilename(setting, liveId)}.ts`)
-    return `ffmpeg -i ${m3u8} -y -c copy ${filePath}`
-  }
-
-  async ffmpegRecord(setting: UserSetting) {
-    try {
-      const liveDetail = await this.chzzk.live.detail(setting.channelId)
-      if (!liveDetail) throw Error('no live detail available')
-
-      const hls = liveDetail.livePlayback.media.find((m) => m.mediaId === 'HLS')
-      if (!hls) throw Error(`no hls source for streamer ${setting.username}`)
-
-      const cmd = this.getFfmpegCmd(setting, hls.path, liveDetail.liveId)
-
-      this.record(setting, cmd)
-    } catch (error) {
-      helper.msg(`failed to record streamer ${setting.username}`)
-
-      fileSys.errorHandler(error, 'ffmpegRecord')
-
-      console.error(error)
-    }
-  }
-
-  isInvalidLiveCategory(allowCategory: string[], currentCategory?: string) {
-    if (allowCategory.length === 0 || !currentCategory) return false
-
-    const category = currentCategory.toLowerCase()
-
-    const isAllowed = allowCategory.some((c) => category.indexOf(c.toLowerCase()) !== -1)
-
-    return !isAllowed
-  }
-
-  async getOnlineUserByTag(tag: string) {
-    const size = 50
-
-    let offset = 0
-    let errorCount = 0
-    let isOngoing = true
-
-    const liveStreams: Live[] = []
-    do {
-      try {
-        const resp = await this.chzzk.search.lives(tag, { size, offset })
-
-        liveStreams.push(...resp.lives)
-
-        offset += size
-        isOngoing = resp.size !== 0
-
-        await helper.wait(10)
-      } catch (error) {
-        const err = error as ErrorItem
-
-        if (++errorCount === 5) {
-          isOngoing = false
-          return []
-        }
-
-        const errors = [err?.message, err.cause?.message].filter((e): e is string => Boolean(e))
-        if (errors.some((err) => failMsg.includes(err))) {
-          errorCount++
-          continue
-        }
-
-        console.error(error)
-      }
-    } while (isOngoing)
-
-    return liveStreams
-  }
-
-  async searchUsersById() {
-    const userDetails = await this.getOnlineUsers()
-
-    const items = Array.from(userDetails).map(([channelId, detail]) => ({
-      channelId,
-      adult: detail.adult,
-      liveId: detail.liveId,
-    }))
-
-    this.recordUserByAdult(items)
-  }
-
-  async searchUSers() {
-    const livesArray = await Promise.all(searchTag.map((tag) => this.getOnlineUserByTag(tag)))
-
-    const lives = livesArray.flat()
-
-    const userToRecord = new Map<string, Live>()
-
-    for (const live of lives) {
-      const { channelId } = live
-
-      const user = this.userList[channelId]
-
-      if (!user) continue
-
-      const recordingUser = this.recordingList[channelId]
-
-      if (recordingUser) {
-        helper.msg(`Recording User ${recordingUser.username} at ${this.getSourceUrl(channelId)}`)
-        continue
-      }
-
-      if (user.disableRecord) {
-        helper.msg(`Can not record ${user.username}'s live stream due to configuration at ${this.getSourceUrl(channelId)}`)
-        continue
-      }
-
-      userToRecord.set(channelId, live)
-    }
-
-    const items = Array.from(userToRecord).map(([channelId, detail]) => ({
-      channelId,
-      adult: detail.adult,
-      liveId: detail.liveId,
-    }))
-
-    this.recordUserByAdult(items)
-  }
-
-  recordUserByAdult(items: RecordItem[]) {
-    for (const { adult, channelId, liveId } of items) {
-      const user = this.userList[channelId]
-
-      // const method = adult ? this.ffmpegRecord.bind(this) : this.streamLinkRecord.bind(this)
-      // method(user)
-
-      if (adult) {
-        helper.msg(`can not record user ${user.username} from adult content`, 'warn')
-        continue
-      }
-
-      this.streamLinkRecord(user, liveId)
-    }
-  }
-
-  async removeProcessKilled() {
-    let recordingList = this.recordingList
-
-    const watchList: RecordingList = {}
-
-    for (const [channelId, onlineUser] of Object.entries(this.recordingList)) {
+  //#region 斷線處理
+  async checkAliveRecord() {
+    const recordingList = this.model.recordingList
+
+    for (const [channelId, onlineUser] of Object.entries(recordingList)) {
       if (helper.isProcessRunning(onlineUser.pid)) {
         recordingList[channelId].controllable = false
-        watchList[channelId] = JSON.parse(JSON.stringify(recordingList[channelId]))
       } else {
         delete recordingList[channelId]
       }
     }
 
-    this.recordingList = recordingList
+    await this.model.setRecordList(recordingList)
 
-    if (Object.keys(watchList).length === 0) return
+    return cloneDeep(recordingList) as RecordingList
+  }
+
+  async monitorDisconnectRecord(disconnectRecordingList: RecordingList) {
+    if (Object.values(disconnectRecordingList).length === 0) return
+
+    const appSetting = await this.model.getAppSetting()
 
     helper.msg(`disconnected cmd found, check until stream end`, 'warn')
 
-    await helper.wait(this.appSetting.checkIntervalSec)
-
     do {
-      for (const [channelId, onlineUser] of Object.entries(watchList)) {
+      for (const [channelId, onlineUser] of Object.entries(disconnectRecordingList)) {
         if (helper.isProcessRunning(onlineUser.pid)) continue
-        delete watchList[channelId]
 
-        recordingList = this.recordingList
-        delete recordingList[channelId]
-        this.recordingList = recordingList
+        delete disconnectRecordingList[channelId]
+        delete this.model.recordingList[channelId]
+
+        await this.model.setRecordList(this.model.recordingList)
       }
 
-      await helper.wait(this.appSetting.checkIntervalSec)
-    } while (Boolean(Object.keys(watchList).length))
+      await helper.wait(appSetting.checkIntervalSec)
+    } while (Object.values(disconnectRecordingList).length)
 
     helper.msg(`all disconnected cmd end`, 'success')
   }
+  //#endregion
 
-  async init() {
-    helper.msg('Initializing App Settings ...')
+  //#region 主程序 檢查 tag
+  async checkUsersByStreamTag() {
+    const lives = await this.api.searchLives()
 
-    fileSys.makeDirIfNotExist(this.appSetting.saveDirectory)
+    const livesToRecord = lives.reduce((acc, live) => {
+      const { channelId } = live
 
-    this.removeProcessKilled()
+      const user = this.model.userList[channelId]
+      if (!user) return acc
 
-    this.mainProcess()
+      const recordingUser = this.model.recordingList[channelId]
+      const streamUrl = this.api.getSourceUrl(channelId)
 
-    this.subProcess()
+      if (recordingUser) {
+        helper.msg(`Recording ${recordingUser.username} at ${streamUrl}`)
+        return acc
+      }
+
+      if (user.disableRecord) {
+        helper.msg(`Can not record ${user.username}'s live stream due to configuration at ${streamUrl}`)
+        return acc
+      }
+
+      acc.push([live, user])
+      return acc
+    }, [] as [Live, UserSetting][])
+
+    livesToRecord.forEach((payload) => this.record.emit(RecordEvent.RECORD_LIVE, ...payload))
   }
 
   async mainProcess() {
-    this.userList = fileSys.getUsersList()
-
-    this.appSetting = fileSys.getAppSetting()
+    await this.model.syncModel()
 
     helper.msg(`Checking Users at ${new Date().toLocaleString()}`, 'title')
 
-    await this.searchUSers()
+    await this.checkUsersByStreamTag()
 
-    await helper.wait(this.appSetting.checkIntervalSec)
+    const appSetting = await this.model.getAppSetting()
+    await helper.wait(appSetting.checkIntervalSec)
 
     this.mainProcess()
+  }
+  //#endregion
+
+  //#region 次程序 user id
+  isInvalidLiveCategory(allowCategory: string[], currentCategory?: string) {
+    if (allowCategory.length === 0 || !currentCategory) return false
+
+    const isAllowed = allowCategory.map((c) => c.toLowerCase()).includes(currentCategory.toLowerCase())
+
+    return !isAllowed
+  }
+
+  async searchUsersById() {
+    const { proactiveSearch } = this.model.appSetting
+
+    const livesToRecord: [LiveDetail, UserSetting][] = []
+
+    for (const channelId of Object.keys(this.model.userList)) {
+      try {
+        const streamUrl = this.api.getSourceUrl(channelId)
+
+        const recordingUser = this.model.recordingList[channelId]
+
+        if (recordingUser) {
+          const { username } = recordingUser
+          helper.msg(`Recording ${username} at ${streamUrl}`)
+          continue
+        }
+
+        const user = this.model.userList[channelId]
+        if (!user || (!proactiveSearch && user.disableRecord)) continue
+
+        const res = await this.api.getLiveDetail(channelId)
+
+        await helper.wait(this.SUB_PROCESS_API_REQUEST_TIME)
+
+        if (!res || res.status !== 'OPEN') continue
+
+        if (user.disableRecord) {
+          helper.msg(`Stop recording ${user.username} due to configuration. url: ${streamUrl}`)
+          continue
+        }
+
+        if (this.isInvalidLiveCategory(user.allowCategory, res.liveCategory)) {
+          helper.msg(`Stop record ${user.username} due to Invalid Category ${res.liveCategory}. url: ${streamUrl}`)
+          continue
+        }
+
+        livesToRecord.push([res, user])
+      } catch (error) {
+        const err = error as ErrorItem
+
+        const errors = [err?.message, err.cause?.message].filter((e): e is string => Boolean(e))
+        if (errors.some((err) => failMsg.includes(err))) {
+          continue
+        }
+
+        console.error(error)
+      }
+    }
+
+    livesToRecord.forEach((payload) => this.record.emit(RecordEvent.RECORD_LIVE, ...payload))
   }
 
   async subProcess() {
@@ -386,8 +193,23 @@ export default class Main {
 
     await this.searchUsersById()
 
-    await helper.wait(5 * 60)
+    await helper.wait(this.SUB_PROCESS_LOOP_TIME)
 
     this.subProcess()
   }
+  //#endregion
+
+  //#region Entry
+  async start() {
+    helper.msg('Initializing App Settings ...')
+
+    await this.model.init()
+
+    const disconnectRecordingList = await this.checkAliveRecord()
+
+    this.mainProcess()
+    this.subProcess()
+    this.monitorDisconnectRecord(disconnectRecordingList)
+  }
+  //#endregion
 }

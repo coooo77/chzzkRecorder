@@ -1,9 +1,11 @@
 {
   "checkIntervalSec": 30,
-  "filenameTemplate": "{username}_{id}_chzzk_{year}{month}{day}_{hr}{min}{sec}",
+  "filenameTemplate": "{username}_{id}_Chzzk_{year}{month}{day}_{hr}{min}{sec}",
   "filenameVodTemplate": "{username}_{id}_ChzzkVod_{vodNum}_{year}{month}{day}_{hr}{min}{sec}_{duration}",
   "saveDirectory": "D:/Path/to/folder",
   "usePuppeteer": true,
+  "proactiveSearch": true,
+  "useLiveFFmpegOutput": true,
   "puppeteerSettings": {
     "headless": false,
     "executablePath": "C:/Path/to/Google/Chrome/Application/chrome.exe"

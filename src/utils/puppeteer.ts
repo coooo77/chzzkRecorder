@@ -1,18 +1,28 @@
 'use strict'
 import puppeteer from 'puppeteer-extra'
 
-import fileSys from './fileSys.js'
+import Model from './model.js'
 
 import type { Channel } from 'chzzk'
 import type { Browser, Page } from 'puppeteer'
 import type { PuppeteerSetting, VideoWithIsAdult } from '../interfaces/index.js'
 
+interface PuppeteerParam {
+  model: Model
+}
+
 export default class Puppeteer {
   isInit = false
+
+  model: Model
 
   page?: Page
 
   browser?: Browser
+
+  constructor({ model }: PuppeteerParam) {
+    this.model = model
+  }
 
   async init(settings: PuppeteerSetting) {
     this.browser = await puppeteer.default.launch(settings)
@@ -39,10 +49,9 @@ export default class Puppeteer {
   private async checkInit() {
     if (this.isInit) return
 
-    const appSetting = fileSys.getAppSetting()
-    if (!appSetting.puppeteerSettings) throw Error('puppeteer settings required')
+    if (!this.model.appSetting.puppeteerSettings) throw Error('puppeteer settings required')
 
-    await this.init(appSetting.puppeteerSettings)
+    await this.init(this.model.appSetting.puppeteerSettings)
   }
 
   private checkPageInst(): asserts this is this & { page: Page } {

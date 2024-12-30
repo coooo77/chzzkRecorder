@@ -6,29 +6,33 @@ import { fileURLToPath } from 'node:url'
 
 import helper from './utils/common.js'
 import fileSys from './utils/fileSys.js'
+
+import Model from './utils/model.js'
 import Puppeteer from './utils/puppeteer.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
-const main = async () => {
-  const chzzk = new ChzzkClient()
-  const puppeteer = new Puppeteer()
+const model = new Model()
+const chzzk = new ChzzkClient()
+const puppeteer = new Puppeteer({ model })
 
+const main = async () => {
   try {
     helper.msg('Start to add Users')
 
-    const appSetting = fileSys.getAppSetting()
+    await model.syncModel()
+
     const userListPath = path.resolve(__dirname, '..', 'addList.json')
-    const newUserList = fileSys.getJSONFile<Record<string, string>>(userListPath)
+    const newUserList = await fileSys.getJSONFile<Record<string, string>>(userListPath)
 
     if (!newUserList) {
       helper.msg('No add list found, process close')
       return
     }
 
-    const fetchFn = appSetting.usePuppeteer ? puppeteer.getChannel.bind(puppeteer) : chzzk.channel.bind(chzzk)
+    const fetchFn = model.appSetting.usePuppeteer ? puppeteer.getChannel.bind(puppeteer) : chzzk.channel.bind(chzzk)
 
-    const userList = fileSys.getUsersList()
+    const { userList } = model
 
     let count = 0
 
@@ -57,7 +61,7 @@ const main = async () => {
       return
     }
 
-    fileSys.saveJSONFile(fileSys.usersListPath, userList)
+    await fileSys.saveJSONFile(fileSys.usersListPath, userList)
 
     helper.msg('Add Users successfully')
   } catch (error) {

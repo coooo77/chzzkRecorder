@@ -2,73 +2,106 @@
 
 import fs from 'fs'
 import path from 'path'
-import { AppSettings, RecordingList, UsersList } from '../interfaces/index.js'
+import fsPromise from 'fs/promises'
 
-export default {
-  recordingListPath: path.join('modal', 'modal.json'),
+import type { AuthCookie } from '../interfaces/cookie.js'
+import type { UsersList, AppSettings, RecordingList } from '../interfaces/index.js'
 
-  usersListPath: path.join('modal', 'users.json'),
+const fileSysOri = {
+  //#region 檔案路徑
+  appConfigPath: path.join('./config.json'),
 
-  getUsersList() {
-    try {
-      const modal = this.getJSONFile<UsersList>(this.usersListPath)
+  cookiePath: path.join('./model/cookie.json'),
 
-      if (!modal) this.saveJSONFile(this.usersListPath, {})
+  usersListPath: path.join('./model/users.json'),
 
-      return modal || {}
-    } catch (error) {
-      this.saveJSONFile(this.usersListPath, {})
+  recordingListPath: path.join('./model/model.json'),
+  //#endregion
 
-      return {}
+  //#region 實況相關資料
+  async getRecordingList(options?: { init: boolean }) {
+    const model = await this.getOrDefaultValue<RecordingList>(this.recordingListPath, {})
+    if (options?.init) await this.saveJSONFile(this.recordingListPath, model)
+    return model
+  },
+  //#endregion
+
+  //#region 通用資料
+  async getUsersList(options?: { init: boolean }) {
+    const model = await this.getOrDefaultValue<UsersList>(this.usersListPath, {})
+    if (options?.init) await this.saveJSONFile(this.usersListPath, model)
+    return model
+  },
+
+  async getCookie(options?: { init: boolean }) {
+    const defaultCookie: AuthCookie = {
+      auth: '',
+      session: '',
     }
+
+    const cookie = await this.getOrDefaultValue<AuthCookie>(this.cookiePath, defaultCookie)
+
+    if (options?.init) await this.saveJSONFile(this.cookiePath, cookie as AuthCookie)
+
+    return cookie
   },
 
-  getRecordingList() {
-    try {
-      const modal = this.getJSONFile<RecordingList>(this.recordingListPath)
+  async getAppSetting() {
+    const setting = await this.getJSONFile<AppSettings>(this.appConfigPath)
+    if (!setting) throw Error('AppSetting file not found')
 
-      if (!modal) this.saveJSONFile(this.recordingListPath, {})
-
-      return modal || {}
-    } catch (error) {
-      this.saveJSONFile(this.recordingListPath, {})
-
-      return {}
-    }
+    return setting
   },
 
-  getAppSetting() {
-    const pathToSetting = path.join('config.json')
+  getAppSettingSync() {
+    if (!fs.existsSync(this.appConfigPath)) throw Error('AppSetting file not found')
 
-    return this.getJSONFile(pathToSetting) as AppSettings
+    const result = fs.readFileSync(this.appConfigPath, 'utf8')
+    return JSON.parse(result) as AppSettings
+  },
+  //#endregion
+
+  //#region 通用
+  async getOrDefaultValue<T>(filePath: string, defaultValue: T) {
+    const model = await this.getJSONFile<T>(filePath)
+    return model || defaultValue
   },
 
-  getJSONFile<T>(filePath: string): T | null {
+  async getJSONFile<T>(filePath: string): Promise<T | null> {
     if (!fs.existsSync(filePath)) return null
 
-    const result = fs.readFileSync(filePath, 'utf8')
+    try {
+      const result = await fsPromise.readFile(filePath, 'utf8')
 
-    return JSON.parse(result)
+      return JSON.parse(result)
+    } catch (error) {
+      console.error(error)
+      return null
+    }
   },
 
-  makeDirIfNotExist(fileLocation: string) {
-    if (fs.existsSync(fileLocation)) return
+  makeDirIfNotExist(fileLocation: string, options?: { sync?: boolean }) {
+    if (fs.existsSync(fileLocation) || !fileLocation) return
 
-    fs.mkdirSync(fileLocation, { recursive: true })
+    if (options?.sync) {
+      fs.mkdirSync(fileLocation, { recursive: true })
+    } else {
+      return fsPromise.mkdir(fileLocation, { recursive: true })
+    }
   },
 
-  saveJSONFile(filePath: string, data: any) {
+  async saveJSONFile(filePath: string, data: any) {
     if (filePath.length === 0) throw new Error('no file path provided')
 
     const { dir } = path.parse(filePath)
 
-    this.makeDirIfNotExist(dir)
+    await this.makeDirIfNotExist(dir)
 
-    fs.writeFileSync(filePath, JSON.stringify(data), 'utf8')
+    await fsPromise.writeFile(filePath, JSON.stringify(data), 'utf8')
   },
 
-  errorHandler(error: any, triggerFnName: string = '', errorLogPath = path.join('error')) {
-    this.makeDirIfNotExist(errorLogPath)
+  async errorHandler(error: any, triggerFnName: string = '', errorLogPath = path.join('error')) {
+    await this.makeDirIfNotExist(errorLogPath)
 
     const log = JSON.parse(JSON.stringify(error || {}))
 
@@ -80,6 +113,16 @@ export default {
 
     const errFilePath = path.join(errorLogPath, `${new Date().getTime()}.json`)
 
-    this.saveJSONFile(errFilePath, log)
+    await this.saveJSONFile(errFilePath, log)
   },
+  //#endregion
 }
+
+type FileSysOri = typeof fileSysOri
+
+interface FileSysOverload extends FileSysOri {
+  makeDirIfNotExist(fileLocation: string): Promise<string | undefined>
+  makeDirIfNotExist(fileLocation: string, options: { sync: true }): void
+}
+
+export default fileSysOri as FileSysOverload
