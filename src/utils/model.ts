@@ -110,25 +110,25 @@ export default class Model extends EventEmitter<ModelEventMap> {
   watchModel() {
     const { cookiePath, appConfigPath, usersListPath } = fileSys
     const watchList = [cookiePath, appConfigPath, usersListPath]
-    const [cookie, setting, userList] = watchList.map((p) => path.basename(p))
+    const nameMap = Object.fromEntries(watchList.map((p) => [p, path.basename(p)]))
 
     const method = {
-      [cookie]: () => {
+      [nameMap[cookiePath]]: () => {
         helper.msg('Cookie updated')
         this.updateCookie()
       },
-      [userList]: () => {
+      [nameMap[usersListPath]]: () => {
         helper.msg('User List updated')
         this.updateUserList()
       },
-      [setting]: () => {
+      [nameMap[appConfigPath]]: () => {
         helper.msg('App Setting updated')
         this.updateAppSetting()
       },
     }
 
     chokidar.watch(watchList).on('change', (p) => {
-      const name = path.basename(p)
+      const name = nameMap[p]
       if (name in method) method[name as keyof typeof method]()
     })
   }
