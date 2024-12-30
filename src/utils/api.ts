@@ -8,6 +8,7 @@ import Model from './model.js'
 
 import type { Live } from 'chzzk'
 import { VideoWithIsAdult } from '../interfaces/common.js'
+import { UserSetting } from '../interfaces/setting.js'
 
 interface ErrorItem {
   cause?: Error
@@ -101,7 +102,12 @@ export default class Api {
   async searchLives() {
     const livesArray = await Promise.all(searchTag.map((tag) => this.getOnlineUserByTag(tag)))
 
-    return livesArray.flat()
+    const liveMap = livesArray.flat().reduce((map, live) => {
+      map.set(live.channelId, live)
+      return map
+    }, new Map<UserSetting['channelId'], Live>())
+
+    return Array.from(liveMap.values())
   }
 
   async getLiveDetail(channelId: string) {
