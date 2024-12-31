@@ -114,8 +114,6 @@ export default class Main {
   }
 
   async mainProcess() {
-    await this.model.syncModel()
-
     helper.msg(`Checking Users at ${new Date().toLocaleString()}`, 'title')
 
     await this.checkUsersByStreamTag()
@@ -203,6 +201,7 @@ export default class Main {
   async start() {
     helper.msg('Initializing App Settings ...')
 
+    this.model.watchModel()
     await this.model.init()
 
     const disconnectRecordingList = await this.checkAliveRecord()
