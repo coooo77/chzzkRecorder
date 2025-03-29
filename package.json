@@ -28,6 +28,7 @@
     "chzzk": "^1.8.0",
     "cookie": "^1.0.2",
     "lodash-es": "^4.17.21",
+    "p-queue": "^8.1.0",
     "puppeteer": "^22.5.0",
     "puppeteer-extra": "^3.3.6"
   }

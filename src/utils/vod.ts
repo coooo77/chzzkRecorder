@@ -1,6 +1,6 @@
 import fs from 'fs'
 import path from 'path'
-import { fileURLToPath } from 'node:url'
+import PQueue from 'p-queue'
 
 import helper from './common.js'
 import ffmpeg from './ffmpeg.js'
@@ -43,9 +43,14 @@ export default class DownloadVod {
     this.puppeteer = puppeteer
   }
 
+  get getVodApiMethod() {
+    return this.model.appSetting.usePuppeteer ? this.puppeteer.getVodData.bind(this.puppeteer) : this.api.getVod.bind(this.api)
+  }
+
   //#region 資料存取
   async getVodList() {
-    return await fileSys.getOrDefaultValue<number[]>(this.vodListPath, [])
+    const videoIdOrUrls = await fileSys.getOrDefaultValue<(number | string)[]>(this.vodListPath, [])
+    return videoIdOrUrls.map(this.getVodId).sort()
   }
 
   async saveVodDownloadList(data: Record<number, VodDownloadItem>) {
@@ -55,10 +60,10 @@ export default class DownloadVod {
 
   //#region 資料請求
   async getVodItem(vodNum: number): Promise<VodDownloadItem | null> {
-    try {
-      const method = this.model.appSetting.usePuppeteer ? this.puppeteer.getVodData.bind(this.puppeteer) : this.api.getVod.bind(this.api)
+    if (Number.isNaN(vodNum)) throw Error(`vodNum must be a number but received ${vodNum}`)
 
-      const vod = await method(vodNum)
+    try {
+      const vod = await this.getVodApiMethod(vodNum)
       if (!vod) return null
 
       const userSetting = this.model.userList[vod.channel.channelId]
@@ -80,6 +85,13 @@ export default class DownloadVod {
       console.error(error)
       return null
     }
+  }
+
+  getVodId(vodId: string | number) {
+    if (typeof vodId === 'number') return vodId
+    const vodUrlRegex = /^https:\/\/chzzk.naver.com\/video\/([0-9]*)/
+    const match = vodUrlRegex.exec(vodId)
+    return Number(match ? match[1] : vodId)
   }
 
   async reduceGetVodItems(vodList: number[]) {
@@ -130,6 +142,18 @@ export default class DownloadVod {
   }
   //#endregion
 
+  // #region 方法
+  async vodDownloadTask(item: VodDownloadItem) {
+    let isProcessing = true
+
+    do {
+      await this.recorder.recordVOD(item)
+      isProcessing = !this.vodDownloadList[item.vodNum]?.finish
+      await helper.wait(3)
+    } while (isProcessing)
+  }
+  // #endregion
+
   //#region Entry
   async start() {
     helper.msg('Start DownloadVod')
@@ -143,14 +167,8 @@ export default class DownloadVod {
 
     if (this.puppeteer.isInit) this.puppeteer.close()
 
-    for (const item of vodItems) {
-      let isProcessing = true
-
-      do {
-        await this.recorder.recordVOD(item)
-        isProcessing = !this.vodDownloadList[item.vodNum].finish
-      } while (isProcessing)
-    }
+    const queue = new PQueue({ concurrency: this.model.appSetting.dlVodConcurrency || 1 })
+    await queue.addAll(vodItems.map((item) => () => this.vodDownloadTask(item)))
 
     const failList = Object.values(this.vodDownloadList).filter((i) => !i.isSuccess)
     if (failList.length) {
