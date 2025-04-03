@@ -7,8 +7,8 @@ import helper from './common.js'
 import Model from './model.js'
 
 import type { Live } from 'chzzk'
-import { VideoWithIsAdult } from '../interfaces/common.js'
-import { UserSetting } from '../interfaces/setting.js'
+import type { UserSetting } from '../interfaces/setting.js'
+import type { VideoWithIsAdult } from '../interfaces/common.js'
 
 interface ErrorItem {
   cause?: Error
@@ -120,6 +120,13 @@ export default class Api {
     const res = await fetch(`https://api.chzzk.naver.com/service/v2/videos/${vodNum}`, { headers: this.headers })
     const json = (await res.json()) as { content?: VideoWithIsAdult }
     const vod = json['content'] ?? null
+    return vod
+  }
+
+  async getVideos(channelId: string) {
+    const res = await fetch(`https://api.chzzk.naver.com/service/v1/channels/${channelId}/videos`, { headers: this.headers })
+    const json = (await res.json()) as { content?: { data: VideoWithIsAdult[] } }
+    const vod = json['content']?.data || null
     return vod
   }
   //#endregion

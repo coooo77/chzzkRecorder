@@ -9,6 +9,7 @@ import { RecordEvent } from './recorder.js'
 // Class
 import Api from './api.js'
 import Model from './model.js'
+import LiveVod from './liveVod.js'
 import Recorder from './recorder.js'
 
 // 型別
@@ -23,6 +24,7 @@ interface ErrorItem {
 interface MainParams {
   api: Api
   model: Model
+  liveVod: LiveVod
   recorder: Recorder
 }
 
@@ -31,14 +33,16 @@ const failMsg = ['ENOTFOUND', 'fetch failed']
 export default class Main {
   api: Api
   model: Model
+  liveVod: LiveVod
   recorder: Recorder
 
   SUB_PROCESS_LOOP_TIME = 5 * 60
   SUB_PROCESS_API_REQUEST_TIME = 5 * 3
 
-  constructor({ api, model, recorder }: MainParams) {
+  constructor({ api, model, recorder, liveVod }: MainParams) {
     this.api = api
     this.model = model
+    this.liveVod = liveVod
     this.recorder = recorder
   }
 
@@ -87,6 +91,15 @@ export default class Main {
   async checkUsersByStreamTag() {
     const lives = await this.api.searchLives()
 
+    await Promise.all([this.mpHandleVodCheck(lives), this.mpHandleUserRecording(lives)])
+  }
+
+  async mpHandleVodCheck(lives: Live[]) {
+    const onlineUserChannelIds = lives.filter((i) => !!this.model.userList[i.channelId]).map((i) => i.channelId)
+    await this.liveVod.checkUseLiveStatus(onlineUserChannelIds, 'main')
+  }
+
+  mpHandleUserRecording(lives: Live[]) {
     const livesToRecord = lives.reduce((acc, live) => {
       const { channelId } = live
 
@@ -110,7 +123,7 @@ export default class Main {
       return acc
     }, [] as [Live, UserSetting][])
 
-    livesToRecord.forEach((payload) => this.recorder.emit(RecordEvent.RECORD_LIVE, ...payload))
+    livesToRecord.forEach((payload) => this.recorder.emit(RecordEvent.RECORD_LIVE_START, ...payload))
   }
 
   async mainProcess() {
@@ -122,6 +135,7 @@ export default class Main {
     await helper.wait(appSetting.checkIntervalSec)
 
     this.mainProcess()
+    this.liveVod.checkVodList()
   }
   //#endregion
 
@@ -135,8 +149,15 @@ export default class Main {
   }
 
   async searchUsersById() {
+    const { livesToRecord, onlineChannelIds } = await this.getUsersById()
+
+    await Promise.all([this.spHandleUserRecording(livesToRecord), this.spHandleVodCheck(onlineChannelIds)])
+  }
+
+  async getUsersById() {
     const { proactiveSearch } = this.model.appSetting
 
+    const onlineChannelIds: string[] = []
     const livesToRecord: [LiveDetail, UserSetting][] = []
 
     for (const channelId of Object.keys(this.model.userList)) {
@@ -146,13 +167,18 @@ export default class Main {
         const recordingUser = this.model.recordingList[channelId]
 
         if (recordingUser) {
+          onlineChannelIds.push(channelId)
+
           const { username } = recordingUser
           helper.msg(`Recording ${username} at ${streamUrl}`)
           continue
         }
 
         const user = this.model.userList[channelId]
-        if (!user || (!proactiveSearch && user.disableRecord)) continue
+        const { disableRecord, enableAutoDownloadVod } = user
+
+        if (!user) continue
+        if (!proactiveSearch && (disableRecord || !enableAutoDownloadVod)) continue
 
         const res = await this.api.getLiveDetail(channelId)
 
@@ -160,17 +186,8 @@ export default class Main {
 
         if (!res || res.status !== 'OPEN') continue
 
-        if (user.disableRecord) {
-          helper.msg(`Stop recording ${user.username} due to configuration. url: ${streamUrl}`)
-          continue
-        }
-
-        if (this.isInvalidLiveCategory(user.allowCategory, res.liveCategory)) {
-          helper.msg(`Stop record ${user.username} due to Invalid Category ${res.liveCategory}. url: ${streamUrl}`)
-          continue
-        }
-
         livesToRecord.push([res, user])
+        onlineChannelIds.push(channelId)
       } catch (error) {
         const err = error as ErrorItem
 
@@ -183,7 +200,33 @@ export default class Main {
       }
     }
 
-    livesToRecord.forEach((payload) => this.recorder.emit(RecordEvent.RECORD_LIVE, ...payload))
+    return { livesToRecord, onlineChannelIds }
+  }
+
+  async spHandleVodCheck(onlineChannelIds: string[]) {
+    this.liveVod.checkUseLiveStatus(onlineChannelIds, 'sub')
+  }
+
+  spHandleUserRecording(livesToRecord: [LiveDetail, UserSetting][]) {
+    const payload: [LiveDetail, UserSetting][] = livesToRecord.filter((i) => {
+      const [res, user] = i
+
+      const streamUrl = this.api.getSourceUrl(user.channelId)
+
+      if (user.disableRecord) {
+        helper.msg(`Stop recording ${user.username} due to configuration. url: ${streamUrl}`)
+        return false
+      }
+
+      if (this.isInvalidLiveCategory(user.allowCategory, res.liveCategory)) {
+        helper.msg(`Stop record ${user.username} due to Invalid Category ${res.liveCategory}. url: ${streamUrl}`)
+        return false
+      }
+
+      return true
+    })
+
+    payload.forEach((item) => this.recorder.emit(RecordEvent.RECORD_LIVE_START, ...item))
   }
 
   async subProcess() {

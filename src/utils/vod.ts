@@ -53,6 +53,11 @@ export default class DownloadVod {
     return videoIdOrUrls.map(this.getVodId).sort()
   }
 
+  async getVodDownloadList() {
+    const list = await fileSys.getOrDefaultValue<Record<number, VodDownloadItem>>(this.vodListPath, {})
+    return list
+  }
+
   async saveVodDownloadList(data: Record<number, VodDownloadItem>) {
     await fileSys.saveJSONFile(this.vodDownloadListPath, data)
   }
@@ -65,21 +70,7 @@ export default class DownloadVod {
     try {
       const vod = await this.getVodApiMethod(vodNum)
       if (!vod) return null
-
-      const userSetting = this.model.userList[vod.channel.channelId]
-
-      return {
-        vodNum,
-        tryCount: 0,
-        finish: false,
-        adult: vod.adult,
-        isSuccess: false,
-        duration: vod.duration,
-        publishDate: vod.publishDate,
-        channelId: vod.channel.channelId,
-        username: userSetting?.username || 'unknown_user',
-        vodUrl: `https://chzzk.naver.com/video/${vodNum}`,
-      }
+      return this.recorder.getVodDownloadItem(vod)
     } catch (error) {
       helper.msg(`fetch failed, vodNum: ${vodNum}`, 'fail')
       console.error(error)
@@ -161,6 +152,7 @@ export default class DownloadVod {
     this.listenRecordEvents()
     await this.model.init()
     await this.model.syncModel()
+    this.vodDownloadList = await this.getVodDownloadList()
 
     const vodList = await this.getVodList()
     const vodItems = await this.reduceGetVodItems(vodList)

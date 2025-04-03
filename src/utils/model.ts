@@ -2,14 +2,25 @@
 import path from 'path'
 import chokidar from 'chokidar'
 import EventEmitter from 'events'
+import { keyBy, pickBy } from 'lodash-es'
 
 import { RecordEvent } from './recorder.js'
 
 import helper from './common.js'
 import fileSys from './fileSys.js'
 
-import type { UsersList, AuthCookie, AppSettings, UserSetting, RecordingList } from '../interfaces/index.js'
 import type { Live } from 'chzzk'
+import type {
+  UsersList,
+  AuthCookie,
+  AppSettings,
+  UserSetting,
+  RecordingList,
+  VodCheckList,
+  VodCheckInfo,
+  VodDownloadList,
+  VodDownloadItem,
+} from '../interfaces/index.js'
 
 export enum ModelEvent {
   ADD_RECORD_LIST = 'model-add-record-list',
@@ -24,7 +35,7 @@ type Pid = number | undefined
  * @see https://stackoverflow.com/questions/67243592/typescript-adding-types-to-eventemitter
  */
 export interface ModelEventMap {
-  [RecordEvent.RECORD_LIVE]: [Live]
+  [RecordEvent.RECORD_LIVE_START]: [Live]
   [ModelEvent.ADD_RECORD_LIST]: [UserSetting, Pid]
   [ModelEvent.REMOVE_RECORD_LIST]: [UserSetting['channelId']]
 }
@@ -38,7 +49,11 @@ export default class Model extends EventEmitter<ModelEventMap> {
 
   userList: UsersList = {}
 
+  vodCheckList: VodCheckList = {}
+
   recordingList: RecordingList = {}
+
+  vodDownloadList: VodDownloadList = {}
 
   MAX_REFRESH_COUNT = 2
 
@@ -58,6 +73,39 @@ export default class Model extends EventEmitter<ModelEventMap> {
   get isDisableRefreshAuth() {
     return this.refreshAuthFailCount > this.MAX_REFRESH_COUNT
   }
+
+  // #region User Vod
+
+  setVodCheckList(items: VodCheckInfo[]) {
+    return this.addPromiseQueue(async () => {
+      const newList = keyBy(items, 'checkTime')
+      this.vodCheckList = Object.assign(this.vodCheckList, newList)
+      await fileSys.saveJSONFile(fileSys.vodCheckListPath, this.vodCheckList)
+    })
+  }
+
+  removeVodCheckList(checkTimes: number[]) {
+    return this.addPromiseQueue(async () => {
+      this.vodCheckList = pickBy(this.vodCheckList, (i) => !checkTimes.includes(i.checkTime))
+      await fileSys.saveJSONFile(fileSys.vodCheckListPath, this.vodCheckList)
+    })
+  }
+
+  setVodDownloadList(items: VodDownloadItem[]) {
+    return this.addPromiseQueue(async () => {
+      const newList = keyBy(items, 'vodNum')
+      this.vodDownloadList = Object.assign(this.vodDownloadList, newList)
+      await fileSys.saveJSONFile(fileSys.vodDownloadListPath, this.vodDownloadList)
+    })
+  }
+
+  removeVodDownloadList(vodNum: number) {
+    return this.addPromiseQueue(async () => {
+      this.vodDownloadList = pickBy(this.vodDownloadList, (i) => i.vodNum !== vodNum)
+      await fileSys.saveJSONFile(fileSys.vodDownloadListPath, this.vodDownloadList)
+    })
+  }
+  // #endregion
 
   //#region Record List
   async initRecordList() {
@@ -108,8 +156,8 @@ export default class Model extends EventEmitter<ModelEventMap> {
 
   /** 精读《如何利用 Nodejs 监听文件夹》 @see https://tinyurl.com/n9r7p3mk */
   watchModel() {
-    const { cookiePath, appConfigPath, usersListPath } = fileSys
-    const watchList = [cookiePath, appConfigPath, usersListPath]
+    const { cookiePath, appConfigPath, usersListPath, vodCheckListPath, vodDownloadListPath } = fileSys
+    const watchList = [cookiePath, appConfigPath, usersListPath, vodCheckListPath, vodDownloadListPath]
     const nameMap = Object.fromEntries(watchList.map((p) => [p, path.basename(p)]))
 
     const method = {
@@ -124,6 +172,14 @@ export default class Model extends EventEmitter<ModelEventMap> {
       [nameMap[appConfigPath]]: () => {
         helper.msg('App Setting updated')
         this.updateAppSetting()
+      },
+      [nameMap[vodCheckListPath]]: () => {
+        helper.msg('Vod Check List updated')
+        this.updateVodCheckList()
+      },
+      [nameMap[vodDownloadListPath]]: () => {
+        helper.msg('Vod Download List updated')
+        this.updateVodDownloadList()
       },
     }
 
@@ -140,12 +196,24 @@ export default class Model extends EventEmitter<ModelEventMap> {
   async updateUserList() {
     this.userList = await fileSys.getUsersList()
   }
+
+  async updateVodCheckList() {
+    this.vodCheckList = await fileSys.getVodCheckList()
+  }
+
+  async updateVodDownloadList() {
+    this.vodDownloadList = await fileSys.getVodDownloadList()
+  }
   // #endregion
 
   //#region Cookie
   async updateCookie() {
     const cookie = await fileSys.getCookie({ init: true })
-    if (cookie) this.authCookie = cookie
+    if (cookie.auth && cookie.session) {
+      this.authCookie = cookie
+    } else {
+      helper.msg('no cookie available', 'warn')
+    }
   }
 
   async setSession(session: string) {

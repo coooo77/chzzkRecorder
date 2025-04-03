@@ -9,10 +9,11 @@ import { ModelEvent } from './model.js'
 import Api from './api.js'
 import Model from './model.js'
 
-import type { UserSetting, VodDownloadItem } from '../interfaces/index.js'
+import type { LiveInfo } from '../interfaces/recorder.js'
+import type { UserSetting, VideoWithIsAdult, VodDownloadItem } from '../interfaces/index.js'
 
 export enum RecordEvent {
-  RECORD_LIVE = 'record-live',
+  RECORD_LIVE_START = 'record-live-start',
   DOWNLOAD_VOD_END = 'download-vod-end',
   DOWNLOAD_VOD_START = 'download-vod-start',
 }
@@ -25,18 +26,13 @@ export enum RecordEvent {
 interface EventMap {
   [RecordEvent.DOWNLOAD_VOD_END]: [VodDownloadItem]
   [RecordEvent.DOWNLOAD_VOD_START]: [VodDownloadItem]
-  [RecordEvent.RECORD_LIVE]: [LiveInfo, UserSetting]
+  [RecordEvent.RECORD_LIVE_START]: [LiveInfo, UserSetting]
 }
 
 interface RecordParams {
   api: Api
   model: Model
   eventParam?: ConstructorParameters<typeof EventEmitter>
-}
-
-interface LiveInfo {
-  adult: boolean
-  liveId: number
 }
 
 export default class Record extends EventEmitter<EventMap> {
@@ -49,7 +45,7 @@ export default class Record extends EventEmitter<EventMap> {
     this.api = api
     this.model = model
 
-    this.on(RecordEvent.RECORD_LIVE, this.recordLiveStream)
+    this.on(RecordEvent.RECORD_LIVE_START, this.recordLiveStream)
   }
 
   get httpCookie() {
@@ -140,6 +136,28 @@ export default class Record extends EventEmitter<EventMap> {
     let cmd = `streamlink ${item.vodUrl} best -f -o ${filePath}`
     if (item.adult) cmd += ` ${this.httpCookie}`
     return cmd
+  }
+
+  getVodDownloadItem(vod: VideoWithIsAdult) {
+    const vodNum = vod.videoNo
+    const userSetting = this.model.userList[vod.channel.channelId]
+
+    const item: VodDownloadItem = {
+      vodNum,
+      tryCount: 0,
+      finish: false,
+      adult: vod.adult,
+      isSuccess: false,
+      duration: vod.duration,
+      publishDate: vod.publishDate,
+      channelId: vod.channel.channelId,
+      username: userSetting?.username || 'unknown_user',
+      vodUrl: `https://chzzk.naver.com/video/${vodNum}`,
+    }
+
+    item.cmd = this.getVodDownloadCmd(item)
+
+    return item
   }
 
   async recordVOD(item: VodDownloadItem) {

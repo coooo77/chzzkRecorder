@@ -5,7 +5,7 @@ import path from 'path'
 import fsPromise from 'fs/promises'
 
 import type { AuthCookie } from '../interfaces/cookie.js'
-import type { UsersList, AppSettings, RecordingList } from '../interfaces/index.js'
+import type { UsersList, AppSettings, RecordingList, VodCheckList, VodDownloadList } from '../interfaces/index.js'
 
 const fileSysOri = {
   //#region 檔案路徑
@@ -16,12 +16,28 @@ const fileSysOri = {
   usersListPath: path.join('./model/users.json'),
 
   recordingListPath: path.join('./model/model.json'),
+
+  vodCheckListPath: path.join('./model/vodCheckList.json'),
+
+  vodDownloadListPath: path.join('./model/vodDownloadList.json'),
   //#endregion
 
   //#region 實況相關資料
   async getRecordingList(options?: { init: boolean }) {
     const model = await this.getOrDefaultValue<RecordingList>(this.recordingListPath, {})
     if (options?.init) await this.saveJSONFile(this.recordingListPath, model)
+    return model
+  },
+
+  async getVodCheckList(options?: { init: boolean }) {
+    const model = await this.getOrDefaultValue<VodCheckList>(this.vodCheckListPath, {})
+    if (options?.init) await this.saveJSONFile(this.vodCheckListPath, model)
+    return model
+  },
+
+  async getVodDownloadList(options?: { init: boolean }) {
+    const model = await this.getOrDefaultValue<VodDownloadList>(this.vodDownloadListPath, {})
+    if (options?.init) await this.saveJSONFile(this.vodDownloadListPath, model)
     return model
   },
   //#endregion
@@ -33,6 +49,7 @@ const fileSysOri = {
   },
 
   async getCookie(options?: { init: boolean }) {
+    // TODO: 需要安全讀取 session 做法
     const defaultCookie: AuthCookie = {
       auth: '',
       session: '',
