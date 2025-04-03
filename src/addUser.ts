@@ -10,6 +10,9 @@ import fileSys from './utils/fileSys.js'
 import Model from './utils/model.js'
 import Puppeteer from './utils/puppeteer.js'
 
+import { UserSetting } from './interfaces/setting.js'
+import type { UserSettingConstructor } from './interfaces/setting.js'
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 const model = new Model()
@@ -32,7 +35,8 @@ const main = async () => {
 
     const fetchFn = model.appSetting.usePuppeteer ? puppeteer.getChannel.bind(puppeteer) : chzzk.channel.bind(chzzk)
 
-    const { userList } = model
+    const { userList, appSetting } = model
+    const overrideSetting = appSetting.userSettingOverride || {}
 
     let count = 0
 
@@ -41,13 +45,13 @@ const main = async () => {
 
       const res = await fetchFn(channelId)
 
-      userList[channelId] = {
+      const userSetting: UserSettingConstructor = {
         username,
         channelId,
         channelName: res.channelName,
-        disableRecord: true,
-        allowCategory: ['Live_Art', 'art'],
       }
+
+      userList[channelId] = Object.assign(new UserSetting(userSetting), overrideSetting)
 
       helper.msg(`User ${username} added`)
 

@@ -6,6 +6,15 @@
   "usePuppeteer": true,
   "proactiveSearch": true,
   "useLiveFFmpegOutput": true,
+  "dlVodConcurrency": 2,
+  "checkUserVodMinutes": [
+    60,
+    360,
+    720
+  ],
+  "userSettingOverride": {
+    "disableRecord": true
+  },
   "puppeteerSettings": {
     "headless": false,
     "executablePath": "C:/Path/to/Google/Chrome/Application/chrome.exe"
