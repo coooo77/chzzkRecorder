@@ -1,6 +1,7 @@
 'use strict'
 // 外部方法
 import { cloneDeep } from 'lodash-es'
+import findProcess from 'find-process'
 
 // 內部方法
 import helper from './common.js'
@@ -46,12 +47,18 @@ export default class Main {
     this.recorder = recorder
   }
 
+  async isLiveRunning(userName: string) {
+    const result = await findProcess('name', userName)
+    return !!result.length && result.some((i) => i.cmd.includes('https://chzzk.naver.com/live'))
+  }
+
   //#region 斷線處理
   async checkAliveRecord() {
     const recordingList = this.model.recordingList
 
     for (const [channelId, onlineUser] of Object.entries(recordingList)) {
-      if (helper.isProcessRunning(onlineUser.pid)) {
+      const isRunning = await this.isLiveRunning(onlineUser.username)
+      if (isRunning) {
         recordingList[channelId].controllable = false
       } else {
         delete recordingList[channelId]
@@ -72,7 +79,8 @@ export default class Main {
 
     do {
       for (const [channelId, onlineUser] of Object.entries(disconnectRecordingList)) {
-        if (helper.isProcessRunning(onlineUser.pid)) continue
+        const isRunning = await this.isLiveRunning(onlineUser.username)
+        if (isRunning) continue
 
         delete disconnectRecordingList[channelId]
         delete this.model.recordingList[channelId]
