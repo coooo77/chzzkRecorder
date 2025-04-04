@@ -36,6 +36,7 @@ export default class DownloadVod {
   vodDownloadListPath = path.join('./vodDownloadList.json')
 
   vodDownloadList: Record<number, VodDownloadItem> = {}
+
   constructor({ api, model, recorder, puppeteer }: DownloadVodParam) {
     this.api = api
     this.model = model
@@ -54,7 +55,7 @@ export default class DownloadVod {
   }
 
   async getVodDownloadList() {
-    const list = await fileSys.getOrDefaultValue<Record<number, VodDownloadItem>>(this.vodListPath, {})
+    const list = await fileSys.getOrDefaultValue<Record<number, VodDownloadItem>>(this.vodDownloadListPath, {})
     return list
   }
 

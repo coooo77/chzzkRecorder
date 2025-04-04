@@ -108,8 +108,8 @@ export default class Model extends EventEmitter<ModelEventMap> {
   // #endregion
 
   //#region Record List
-  async initRecordList() {
-    this.recordingList = await fileSys.getRecordingList({ init: true })
+  async getRecordingList() {
+    this.recordingList = await fileSys.getRecordingList()
   }
 
   setRecordList(list: RecordingList) {
@@ -143,7 +143,7 @@ export default class Model extends EventEmitter<ModelEventMap> {
 
   // #region 資料同步
   async init() {
-    await Promise.all([this.updateCookie(), this.updateUserList(), this.initRecordList(), fileSys.makeDirIfNotExist(this.appSetting.saveDirectory)])
+    await Promise.all([this.updateCookie(), this.updateUserList(), this.getRecordingList(), fileSys.makeDirIfNotExist(this.appSetting.saveDirectory)])
   }
 
   async syncModel() {
