@@ -145,9 +145,8 @@ export default class Record extends EventEmitter<EventMap> {
     const item: VodDownloadItem = {
       vodNum,
       tryCount: 0,
-      finish: false,
       adult: vod.adult,
-      isSuccess: false,
+      status: 'waiting',
       duration: vod.duration,
       publishDate: vod.publishDate,
       channelId: vod.channel.channelId,

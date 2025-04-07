@@ -99,7 +99,7 @@ export default class DownloadVod {
   }
 
   async onDownloadVodStart(item: VodDownloadItem) {
-    this.vodDownloadList[item.vodNum] = item
+    this.vodDownloadList[item.vodNum] = Object.assign(item, { status: 'ongoing'})
     await this.saveVodDownloadList(this.vodDownloadList)
   }
 
@@ -112,17 +112,16 @@ export default class DownloadVod {
     } else {
       const videoDuration = ffmpeg.getMediaDuration(filePath)
       const isSuccess = item.duration - videoDuration <= this.VALID_DURATION
-      vod.finish = isSuccess
-      vod.isSuccess = isSuccess
+      if (isSuccess)vod.status = 'success'
     }
 
-    if (!vod.isSuccess) {
+    if (vod.status !== 'success') {
       helper.msg(`Failed to download vod ${item.vodNum}`)
       vod.tryCount++
     }
 
     if (vod.tryCount >= this.MAX_RETRY_COUNT) {
-      vod.finish = true
+      vod.status = 'failed'
     }
 
     await this.saveVodDownloadList(this.vodDownloadList)
@@ -140,7 +139,7 @@ export default class DownloadVod {
 
     do {
       await this.recorder.recordVOD(item)
-      isProcessing = !this.vodDownloadList[item.vodNum]?.finish
+      isProcessing = this.vodDownloadList[item.vodNum]?.status === 'ongoing'
       await helper.wait(3)
     } while (isProcessing)
   }
@@ -163,7 +162,7 @@ export default class DownloadVod {
     const queue = new PQueue({ concurrency: this.model.appSetting.dlVodConcurrency || 1 })
     await queue.addAll(vodItems.map((item) => () => this.vodDownloadTask(item)))
 
-    const failList = Object.values(this.vodDownloadList).filter((i) => !i.isSuccess)
+    const failList = Object.values(this.vodDownloadList).filter((i) => i.status !== 'success')
     if (failList.length) {
       failList.forEach((i) => helper.msg(`Failed to download vod ${i.vodNum}`))
     } else {

@@ -159,12 +159,12 @@ export default class LiveVod {
   }
 
   async downloadVodList() {
-    if (this.ableDownloadCount === 0) return
+    if (this.ableDownloadCount <= 0) return
 
-    const tasks = Object.values(pickBy(this.model.vodDownloadList, (i) => !i.finish))
+    const tasks = Object.values(pickBy(this.model.vodDownloadList, (i) => i.status === 'waiting'))
 
     for (let i = 0; i < tasks.length; i++) {
-      if (this.ableDownloadCount === 0) break
+      if (this.ableDownloadCount <= 0) break
       this.DOWNLOADING_ITEMS_COUNT++
       this.vodDownloadTask(tasks[i])
     }
@@ -177,7 +177,7 @@ export default class LiveVod {
 
     do {
       await this.recorder.recordVOD(item)
-      isProcessing = !this.model.vodDownloadList[item.vodNum]?.finish
+      isProcessing = this.model.vodDownloadList[item.vodNum]?.status === 'ongoing'
       await helper.wait(3)
     } while (isProcessing)
 
@@ -186,6 +186,11 @@ export default class LiveVod {
   // #endregion
 
   // #region 事件監聽
+    async onDownloadVodStart(item: VodDownloadItem) {
+    this.model.vodDownloadList[item.vodNum] = Object.assign(item, { status: 'ongoing'})
+    await this.model.setVodDownloadList(Object.values(this.model.vodDownloadList))
+  }
+
   async onDownloadVodEnd(item: VodDownloadItem) {
     const vod = this.model.vodDownloadList[item.vodNum]
 
@@ -195,17 +200,16 @@ export default class LiveVod {
     } else {
       const videoDuration = ffmpeg.getMediaDuration(filePath)
       const isSuccess = item.duration - videoDuration <= this.VALID_DURATION
-      vod.finish = isSuccess
-      vod.isSuccess = isSuccess
+      if (isSuccess) vod.status = 'success'
     }
 
-    if (!vod.isSuccess) {
+    if (vod.status !== 'success') {
       helper.msg(`Failed to download vod ${item.vodNum}`)
       vod.tryCount++
     }
 
     if (vod.tryCount >= this.MAX_RETRY_COUNT) {
-      vod.finish = true
+      vod.status = 'failed'
     }
 
     await this.model.setVodDownloadList(Object.values(this.model.vodDownloadList))
@@ -213,6 +217,7 @@ export default class LiveVod {
 
   listenRecordEvents() {
     this.recorder.on(RecordEvent.DOWNLOAD_VOD_END, (...arg) => this.onDownloadVodEnd(...arg))
+    this.recorder.on(RecordEvent.DOWNLOAD_VOD_START, (...arg) => this.onDownloadVodStart(...arg))
   }
   // #endregion
 }

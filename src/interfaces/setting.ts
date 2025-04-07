@@ -74,11 +74,10 @@ export interface VodDownloadItem {
   vodNum: number
   vodUrl: string
   duration: number
-  finish: boolean
-  isSuccess: boolean
   tryCount: number
   adult: boolean
   cmd?: string
+  status: 'pending' | 'waiting' | 'ongoing' | 'success' | 'failed'
 }
 
 export type UsersList = Record<UserSetting['channelId'], UserSetting>
