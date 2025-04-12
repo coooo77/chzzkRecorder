@@ -108,8 +108,8 @@ export default class Model extends EventEmitter<ModelEventMap> {
   // #endregion
 
   //#region Record List
-  async getRecordingList() {
-    this.recordingList = await fileSys.getRecordingList()
+  async getRecordingList(options?: { init: boolean }) {
+    this.recordingList = await fileSys.getRecordingList({ init: !!options?.init })
   }
 
   setRecordList(list: RecordingList) {
@@ -143,7 +143,12 @@ export default class Model extends EventEmitter<ModelEventMap> {
 
   // #region 資料同步
   async init() {
-    await Promise.all([this.updateCookie(), this.updateUserList(), this.getRecordingList(), fileSys.makeDirIfNotExist(this.appSetting.saveDirectory)])
+    await Promise.all([
+      this.updateUserList(),
+      this.updateCookie({ init: true }),
+      this.getRecordingList({ init: true }),
+      fileSys.makeDirIfNotExist(this.appSetting.saveDirectory),
+    ])
   }
 
   async syncModel() {
@@ -212,8 +217,8 @@ export default class Model extends EventEmitter<ModelEventMap> {
     return !!auth && !!session
   }
 
-  async updateCookie() {
-    const cookie = await fileSys.getCookie()
+  async updateCookie(options?: { init?: boolean }) {
+    const cookie = await fileSys.getCookie({ init: !!options?.init })
     if (cookie.auth && cookie.session) {
       this.authCookie = cookie
     } else {
