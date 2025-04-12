@@ -37,6 +37,8 @@ export default class Main {
   liveVod: LiveVod
   recorder: Recorder
 
+  artLives: Live[] = []
+
   SUB_PROCESS_LOOP_TIME = 5 * 60
   SUB_PROCESS_API_REQUEST_TIME = 5 * 3
 
@@ -98,6 +100,8 @@ export default class Main {
   //#region 主程序 檢查 tag
   async checkUsersByStreamTag() {
     const lives = await this.api.searchLives()
+
+    this.artLives = lives
 
     await Promise.all([this.mpHandleVodCheck(lives), this.mpHandleUserRecording(lives)])
   }
@@ -162,6 +166,10 @@ export default class Main {
     await Promise.all([this.spHandleUserRecording(livesToRecord), this.spHandleVodCheck(onlineChannelIds)])
   }
 
+  get artLiveChannelIdSet() {
+    return this.artLives.reduce((set, cur) => set.add(cur.channelId), new Set<string>())
+  }
+
   async getUsersById() {
     const { proactiveSearch } = this.model.appSetting
 
@@ -187,6 +195,9 @@ export default class Main {
 
         if (!user) continue
         if (!proactiveSearch && (disableRecord || !enableAutoDownloadVod)) continue
+
+        // 如果該頻道正在實況，就沒有必要再檢查
+        if (this.artLiveChannelIdSet.has(channelId))continue
 
         const res = await this.api.getLiveDetail(channelId)
 
