@@ -207,8 +207,13 @@ export default class Model extends EventEmitter<ModelEventMap> {
   // #endregion
 
   //#region Cookie
+  get cookieIsAvailable() {
+    const { auth, session } = this.authCookie
+    return !!auth && !!session
+  }
+
   async updateCookie() {
-    const cookie = await fileSys.getCookie({ init: true })
+    const cookie = await fileSys.getCookie()
     if (cookie.auth && cookie.session) {
       this.authCookie = cookie
     } else {
@@ -218,7 +223,9 @@ export default class Model extends EventEmitter<ModelEventMap> {
 
   async setSession(session: string) {
     this.authCookie.session = session
-    await fileSys.saveJSONFile(fileSys.cookiePath, this.authCookie)
+    const { auth } = this.authCookie
+    const cookieString = `${auth}\r\n${session}`
+    await fileSys.saveTxtFile(fileSys.cookiePath, cookieString)
   }
   //#endregion
 

@@ -141,6 +141,8 @@ export default class Main {
   async mainProcess() {
     helper.msg(`Checking Users at ${new Date().toLocaleString()}`, 'title')
 
+    if (!this.model.cookieIsAvailable) helper.msg('no cookie available', 'warn')
+
     await this.checkUsersByStreamTag()
 
     const appSetting = await this.model.getAppSetting()
@@ -197,7 +199,7 @@ export default class Main {
         if (!proactiveSearch && (disableRecord || !enableAutoDownloadVod)) continue
 
         // 如果該頻道正在實況，就沒有必要再檢查
-        if (this.artLiveChannelIdSet.has(channelId))continue
+        if (this.artLiveChannelIdSet.has(channelId)) continue
 
         const res = await this.api.getLiveDetail(channelId)
 

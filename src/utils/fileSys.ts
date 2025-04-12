@@ -4,6 +4,8 @@ import fs from 'fs'
 import path from 'path'
 import fsPromise from 'fs/promises'
 
+import helper from './common.js'
+
 import type { AuthCookie } from '../interfaces/cookie.js'
 import type { UsersList, AppSettings, RecordingList, VodCheckList, VodDownloadList } from '../interfaces/index.js'
 
@@ -11,7 +13,7 @@ const fileSysOri = {
   //#region 檔案路徑
   appConfigPath: path.join('./config.json'),
 
-  cookiePath: path.join('./model/cookie.json'),
+  cookiePath: path.join('./model/cookie.txt'),
 
   usersListPath: path.join('./model/users.json'),
 
@@ -49,15 +51,23 @@ const fileSysOri = {
   },
 
   async getCookie(options?: { init: boolean }) {
-    // TODO: 需要安全讀取 session 做法
-    const defaultCookie: AuthCookie = {
-      auth: '',
-      session: '',
+    const cookie: AuthCookie = { auth: '', session: '' }
+
+    const cookieString = await this.getTxtFile(this.cookiePath)
+
+    if (cookieString && cookieString.length) {
+      const [auth, session] = cookieString.split('\r\n')
+      if (auth && session) {
+        cookie.auth = auth
+        cookie.session = session
+      }
     }
 
-    const cookie = await this.getOrDefaultValue<AuthCookie>(this.cookiePath, defaultCookie)
-
-    if (options?.init) await this.saveJSONFile(this.cookiePath, cookie as AuthCookie)
+    if (options?.init) {
+      const { auth, session } = cookie
+      const saveCookieString = auth && session ? `${cookie.auth}\r\n${cookie.session}` : ''
+      await this.saveTxtFile(this.cookiePath, saveCookieString)
+    }
 
     return cookie
   },
@@ -78,6 +88,32 @@ const fileSysOri = {
   //#endregion
 
   //#region 通用
+  async getTxtFile(filePath: string) {
+    if (!filePath) throw Error(`fail to get file due to empty path`)
+    if (!fs.existsSync(filePath)) return null
+
+    try {
+      const result = await fsPromise.readFile(filePath, 'utf8')
+      return result
+    } catch (error) {
+      return null
+    }
+  },
+
+  async saveTxtFile(filePath: string, data: string) {
+    if (!filePath) throw Error(`fail to get file due to empty path`)
+
+    try {
+      const { dir } = path.parse(filePath)
+
+      await this.makeDirIfNotExist(dir)
+
+      await fsPromise.writeFile(filePath, data, 'utf8')
+    } catch (error) {
+      helper.msg(`fail to save txt file: ${filePath}`, 'error')
+    }
+  },
+
   async getOrDefaultValue<T>(filePath: string, defaultValue: T) {
     const model = await this.getJSONFile<T>(filePath)
     return model || defaultValue

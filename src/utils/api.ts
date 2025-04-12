@@ -42,8 +42,9 @@ export default class Api {
   }
 
   get headerWithAuth() {
+    if (!this.model.cookieIsAvailable) throw new Error('No auth cookie')
+
     const { auth, session } = this.model.authCookie
-    if (!auth || !session) throw new Error('No auth cookie')
     return {
       'User-Agent': this.userAgent,
       Cookie: `NID_SES=${session};NID_AUT=${auth}`,
@@ -142,7 +143,7 @@ export default class Api {
 
   async refreshSession() {
     if (this.model.isDisableRefreshAuth) {
-      helper.msg('Reach refresh limit', 'warn')
+      helper.msg('Reach refresh auth cookie limit', 'warn')
       return null
     }
 
