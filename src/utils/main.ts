@@ -145,8 +145,7 @@ export default class Main {
 
     await this.checkUsersByStreamTag()
 
-    const appSetting = await this.model.getAppSetting()
-    await helper.wait(appSetting.checkIntervalSec)
+    await helper.wait(this.model.appSetting.checkIntervalSec)
 
     this.mainProcess()
     this.liveVod.checkVodList()

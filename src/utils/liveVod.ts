@@ -186,8 +186,8 @@ export default class LiveVod {
   // #endregion
 
   // #region 事件監聽
-    async onDownloadVodStart(item: VodDownloadItem) {
-    this.model.vodDownloadList[item.vodNum] = Object.assign(item, { status: 'ongoing'})
+  async onDownloadVodStart(item: VodDownloadItem) {
+    this.model.vodDownloadList[item.vodNum] = Object.assign(item, { status: 'ongoing' })
     await this.model.setVodDownloadList(Object.values(this.model.vodDownloadList))
   }
 

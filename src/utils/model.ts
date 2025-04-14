@@ -145,6 +145,9 @@ export default class Model extends EventEmitter<ModelEventMap> {
   async init() {
     await Promise.all([
       this.updateUserList(),
+      this.updateAppSetting(),
+      this.updateVodCheckList(),
+      this.updateVodDownloadList(),
       this.updateCookie({ init: true }),
       this.getRecordingList({ init: true }),
       fileSys.makeDirIfNotExist(this.appSetting.saveDirectory),
