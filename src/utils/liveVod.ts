@@ -138,6 +138,7 @@ export default class LiveVod {
 
         // 找到可下載 VOD 不需再檢查相同類型的 VOD
         if (vidsToDl.length) {
+          // TODO: 過濾實況類型
           const sameChannelIdVodCheckItems = pickBy(this.model.vodCheckList, (i) => i.channelId === channelId)
           await Promise.all([this.setDownloadTask(vidsToDl), this.model.removeVodCheckList(Object.keys(sameChannelIdVodCheckItems).map(Number))])
         }
@@ -175,9 +176,10 @@ export default class LiveVod {
   async vodDownloadTask(item: VodDownloadItem) {
     let isProcessing = true
 
+    const { vodNum } = item
     do {
-      await this.recorder.recordVOD(item)
-      isProcessing = this.model.vodDownloadList[item.vodNum]?.status === 'ongoing'
+      await this.recorder.recordVOD(this.model.vodDownloadList[vodNum])
+      isProcessing = this.model.vodDownloadList[vodNum]?.status === 'ongoing'
       await helper.wait(3)
     } while (isProcessing)
 
