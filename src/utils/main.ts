@@ -206,6 +206,12 @@ export default class Main {
 
         if (!res || res.status !== 'OPEN') continue
 
+        // 如果是不合法的實況類型 略過該實況，主程序只有檢查藝術 tag，所以不用判斷
+        if (this.isInvalidLiveCategory(user.allowCategory, res.liveCategory)) {
+          helper.msg(`Stop record ${user.username} due to Invalid Category ${res.liveCategory}. url: ${streamUrl}`)
+          continue
+        }
+
         livesToRecord.push([res, user])
         onlineChannelIds.push(channelId)
       } catch (error) {
@@ -235,11 +241,6 @@ export default class Main {
 
       if (user.disableRecord) {
         helper.msg(`Stop recording ${user.username} due to configuration. url: ${streamUrl}`)
-        return false
-      }
-
-      if (this.isInvalidLiveCategory(user.allowCategory, res.liveCategory)) {
-        helper.msg(`Stop record ${user.username} due to Invalid Category ${res.liveCategory}. url: ${streamUrl}`)
         return false
       }
 
