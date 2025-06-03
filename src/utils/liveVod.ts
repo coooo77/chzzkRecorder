@@ -89,7 +89,12 @@ export default class LiveVod {
     }
 
     const videos = await this.api.getVideos(channelId)
-    const lastVodNumber = Array.isArray(videos) && videos.length !== 0 ? Math.max(...videos.map((v) => v.videoNo)) : null
+    const onlineLastVodNumber = Array.isArray(videos) && videos.length !== 0 ? Math.max(...videos.map((v) => v.videoNo)) : null
+    const localLastVodNumber = this.model.lastVodIdList[channelId] || null
+
+    // 如果有紀錄最近下載的 vod，則比較跟線上哪個是最早下載的 vod id，用該 id 判斷要從哪個 vod 開始下載
+    const latVodNumbers = [onlineLastVodNumber, localLastVodNumber].filter((n): n is number => typeof n === 'number')
+    const lastVodNumber = latVodNumbers.length ? Math.min(...latVodNumbers) : null
 
     const { checkUserVodMinutes } = this.model.appSetting
     const checkInterval = checkUserVodMinutes || Array.from({ length: 3 }, (_, i) => 60 * (i + 1))
@@ -202,7 +207,13 @@ export default class LiveVod {
     } else {
       const videoDuration = ffmpeg.getMediaDuration(filePath)
       const isSuccess = item.duration - videoDuration <= this.VALID_DURATION
-      if (isSuccess) vod.status = 'success'
+
+      if (isSuccess) {
+        vod.status = 'success'
+
+        const updateLastVodIdPayload = { [vod.channelId]: vod.vodNum }
+        await this.model.setLastVodIdList(updateLastVodIdPayload)
+      }
     }
 
     if (vod.status !== 'success') {

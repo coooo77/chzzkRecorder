@@ -20,6 +20,7 @@ import type {
   VodCheckInfo,
   VodDownloadList,
   VodDownloadItem,
+  LastVodIdList,
 } from '../interfaces/index.js'
 
 export enum ModelEvent {
@@ -53,6 +54,8 @@ export default class Model extends EventEmitter<ModelEventMap> {
 
   recordingList: RecordingList = {}
 
+  lastVodIdList: LastVodIdList = {}
+
   vodDownloadList: VodDownloadList = {}
 
   MAX_REFRESH_COUNT = 2
@@ -75,7 +78,6 @@ export default class Model extends EventEmitter<ModelEventMap> {
   }
 
   // #region User Vod
-
   setVodCheckList(items: VodCheckInfo[]) {
     return this.addPromiseQueue(async () => {
       const newList = keyBy(items, 'checkTime')
@@ -103,6 +105,15 @@ export default class Model extends EventEmitter<ModelEventMap> {
     return this.addPromiseQueue(async () => {
       this.vodDownloadList = pickBy(this.vodDownloadList, (i) => i.vodNum !== vodNum)
       await fileSys.saveJSONFile(fileSys.vodDownloadListPath, this.vodDownloadList)
+    })
+  }
+  // #endregion
+
+  // #region last Vod Id List
+  setLastVodIdList(newList: LastVodIdList) {
+    return this.addPromiseQueue(async () => {
+      this.lastVodIdList = Object.assign(this.lastVodIdList, newList)
+      await fileSys.saveJSONFile(fileSys.lastVodIdListPath, this.lastVodIdList)
     })
   }
   // #endregion
@@ -147,6 +158,7 @@ export default class Model extends EventEmitter<ModelEventMap> {
       this.updateUserList(),
       this.updateAppSetting(),
       this.updateVodCheckList(),
+      this.updateLastVodIdList(),
       this.updateVodDownloadList(),
       this.updateCookie({ init: true }),
       this.getRecordingList({ init: true }),
@@ -164,8 +176,8 @@ export default class Model extends EventEmitter<ModelEventMap> {
 
   /** 精读《如何利用 Nodejs 监听文件夹》 @see https://tinyurl.com/n9r7p3mk */
   watchModel() {
-    const { cookiePath, appConfigPath, usersListPath, vodCheckListPath, vodDownloadListPath } = fileSys
-    const watchList = [cookiePath, appConfigPath, usersListPath, vodCheckListPath, vodDownloadListPath]
+    const { cookiePath, appConfigPath, usersListPath, vodCheckListPath, vodDownloadListPath, lastVodIdListPath } = fileSys
+    const watchList = [cookiePath, appConfigPath, usersListPath, vodCheckListPath, vodDownloadListPath, lastVodIdListPath]
     const nameMap = Object.fromEntries(watchList.map((p) => [p, path.basename(p)]))
 
     const method = {
@@ -189,6 +201,10 @@ export default class Model extends EventEmitter<ModelEventMap> {
         helper.msg('Vod Download List updated')
         this.updateVodDownloadList()
       },
+      [nameMap[lastVodIdListPath]]: () => {
+        helper.msg('Last Vod Download Id List updated')
+        this.updateLastVodIdList()
+      },
     }
 
     chokidar.watch(watchList).on('change', (p) => {
@@ -211,6 +227,10 @@ export default class Model extends EventEmitter<ModelEventMap> {
 
   async updateVodDownloadList() {
     this.vodDownloadList = await fileSys.getVodDownloadList()
+  }
+
+  async updateLastVodIdList() {
+    this.lastVodIdList = await fileSys.getLastVodIdList()
   }
   // #endregion
 

@@ -7,7 +7,7 @@ import fsPromise from 'fs/promises'
 import helper from './common.js'
 
 import type { AuthCookie } from '../interfaces/cookie.js'
-import type { UsersList, AppSettings, RecordingList, VodCheckList, VodDownloadList } from '../interfaces/index.js'
+import type { UsersList, AppSettings, RecordingList, VodCheckList, VodDownloadList, LastVodIdList } from '../interfaces/index.js'
 
 const fileSysOri = {
   //#region 檔案路徑
@@ -21,26 +21,32 @@ const fileSysOri = {
 
   vodCheckListPath: path.join('./model/vodCheckList.json'),
 
+  lastVodIdListPath: path.join('./model/lastVodIdList.json'),
+
   vodDownloadListPath: path.join('./model/vodDownloadList.json'),
   //#endregion
 
   //#region 實況相關資料
-  async getRecordingList(options?: { init: boolean }) {
-    const model = await this.getOrDefaultValue<RecordingList>(this.recordingListPath, {})
-    if (options?.init) await this.saveJSONFile(this.recordingListPath, model)
+  async getModel<T>(filePath: string, defaultValue: T, init?: boolean) {
+    const model = await this.getOrDefaultValue<T>(filePath, defaultValue)
+    if (init) await this.saveJSONFile(filePath, model)
     return model
+  },
+
+  async getRecordingList(options?: { init: boolean }) {
+    return await this.getModel<RecordingList>(this.recordingListPath, {}, options?.init)
   },
 
   async getVodCheckList(options?: { init: boolean }) {
-    const model = await this.getOrDefaultValue<VodCheckList>(this.vodCheckListPath, {})
-    if (options?.init) await this.saveJSONFile(this.vodCheckListPath, model)
-    return model
+    return await this.getModel<VodCheckList>(this.vodCheckListPath, {}, options?.init)
   },
 
   async getVodDownloadList(options?: { init: boolean }) {
-    const model = await this.getOrDefaultValue<VodDownloadList>(this.vodDownloadListPath, {})
-    if (options?.init) await this.saveJSONFile(this.vodDownloadListPath, model)
-    return model
+    return await this.getModel<VodDownloadList>(this.vodDownloadListPath, {}, options?.init)
+  },
+
+  async getLastVodIdList(options?: { init: boolean }) {
+    return await this.getModel<LastVodIdList>(this.lastVodIdListPath, {}, options?.init)
   },
   //#endregion
 
