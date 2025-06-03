@@ -16,6 +16,7 @@ export class UserSetting {
   channelId: string
   channelName: string
   allowCategory: string[] = ['Live_Art', 'art']
+  skipCategoryCheck?: boolean
   disableRecord?: boolean = true
   enableAutoDownloadVod?: boolean = false
 

@@ -177,6 +177,11 @@ export default class Main {
     const onlineChannelIds: string[] = []
     const livesToRecord: [LiveDetail, UserSetting][] = []
 
+    if (!proactiveSearch) {
+      helper.msg('skip sub process due to false value of proactiveSearch')
+      return { onlineChannelIds, livesToRecord }
+    }
+
     for (const channelId of Object.keys(this.model.userList)) {
       try {
         const streamUrl = this.api.getSourceUrl(channelId)
@@ -195,7 +200,7 @@ export default class Main {
         const { disableRecord, enableAutoDownloadVod } = user
 
         if (!user) continue
-        if (!proactiveSearch && (disableRecord || !enableAutoDownloadVod)) continue
+        if (disableRecord || !enableAutoDownloadVod) continue
 
         // 如果該頻道正在實況，就沒有必要再檢查
         if (this.artLiveChannelIdSet.has(channelId)) continue
@@ -207,8 +212,13 @@ export default class Main {
         if (!res || res.status !== 'OPEN') continue
 
         // 如果是不合法的實況類型 略過該實況，主程序只有檢查藝術 tag，所以不用判斷
-        if (this.isInvalidLiveCategory(user.allowCategory, res.liveCategory)) {
+        if (!user.skipCategoryCheck && this.isInvalidLiveCategory(user.allowCategory, res.liveCategory)) {
           helper.msg(`Stop record ${user.username} due to Invalid Category ${res.liveCategory}. url: ${streamUrl}`)
+          continue
+        }
+
+        if (user.disableRecord) {
+          helper.msg(`Stop recording ${user.username} due to configuration. url: ${streamUrl}`)
           continue
         }
 
@@ -234,20 +244,7 @@ export default class Main {
   }
 
   spHandleUserRecording(livesToRecord: [LiveDetail, UserSetting][]) {
-    const payload: [LiveDetail, UserSetting][] = livesToRecord.filter((i) => {
-      const [res, user] = i
-
-      const streamUrl = this.api.getSourceUrl(user.channelId)
-
-      if (user.disableRecord) {
-        helper.msg(`Stop recording ${user.username} due to configuration. url: ${streamUrl}`)
-        return false
-      }
-
-      return true
-    })
-
-    payload.forEach((item) => this.recorder.emit(RecordEvent.RECORD_LIVE_START, ...item))
+    livesToRecord.forEach((item) => this.recorder.emit(RecordEvent.RECORD_LIVE_START, ...item))
   }
 
   async subProcess() {
