@@ -200,7 +200,7 @@ export default class Main {
         const { disableRecord, enableAutoDownloadVod } = user
 
         if (!user) continue
-        if (disableRecord || !enableAutoDownloadVod) continue
+        if (disableRecord && !enableAutoDownloadVod) continue
 
         // 如果該頻道正在實況，就沒有必要再檢查
         if (this.artLiveChannelIdSet.has(channelId)) continue
