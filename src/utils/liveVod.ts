@@ -219,10 +219,7 @@ export default class LiveVod {
     if (vod.status !== 'success') {
       helper.msg(`Failed to download vod ${item.vodNum}`)
       vod.tryCount++
-    }
-
-    if (vod.tryCount >= this.MAX_RETRY_COUNT) {
-      vod.status = 'failed'
+      if (vod.tryCount >= this.MAX_RETRY_COUNT) vod.status = 'failed'
     }
 
     await this.model.setVodDownloadList(Object.values(this.model.vodDownloadList))
