@@ -2,7 +2,7 @@
 import path from 'path'
 import chokidar from 'chokidar'
 import EventEmitter from 'events'
-import { keyBy, pickBy } from 'lodash-es'
+import { keyBy, pickBy, isEqual, debounce } from 'lodash-es'
 
 import { RecordEvent } from './recorder.js'
 
@@ -63,6 +63,24 @@ export default class Model extends EventEmitter<ModelEventMap> {
   refreshAuthFailCount = 0
 
   authCookie: AuthCookie = { auth: '', session: '' }
+
+  waitMs = 150
+
+  updateUserList = debounce(() => {
+    this.retryUpdate(this.userList, fileSys.getUsersList.bind(fileSys), (payload) => (this.userList = payload), 'user list')
+  }, this.waitMs)
+
+  updateVodCheckList = debounce(() => {
+    this.retryUpdate(this.vodCheckList, fileSys.getVodCheckList.bind(fileSys), (payload) => (this.vodCheckList = payload), 'vod check list')
+  }, this.waitMs)
+
+  updateLastVodIdList = debounce(() => {
+    this.retryUpdate(this.vodDownloadList, fileSys.getVodDownloadList.bind(fileSys), (payload) => (this.vodDownloadList = payload), 'last vod id list')
+  }, this.waitMs)
+
+  updateVodDownloadList = debounce(() => {
+    this.retryUpdate(this.lastVodIdList, fileSys.getLastVodIdList.bind(fileSys), (payload) => (this.lastVodIdList = payload), 'vod download list')
+  }, this.waitMs)
 
   constructor(...args: ConstructorParameters<typeof EventEmitter>) {
     super(...args)
@@ -217,20 +235,36 @@ export default class Model extends EventEmitter<ModelEventMap> {
     this.appSetting = await fileSys.getAppSetting()
   }
 
-  async updateUserList() {
-    this.userList = await fileSys.getUsersList()
-  }
+  async retryUpdate<T>(currentData: T, getMethod: () => Promise<T>, updateCb: (payload: T) => void, payloadName: string) {
+    for (let i = 0; i < 3; i++) {
+      try {
+        const payload = await getMethod()
 
-  async updateVodCheckList() {
-    this.vodCheckList = await fileSys.getVodCheckList()
-  }
+        if (isEqual(currentData, payload)) {
+          helper.msg(`update ${payloadName} successfully`, 'success')
+          return
+        }
 
-  async updateVodDownloadList() {
-    this.vodDownloadList = await fileSys.getVodDownloadList()
-  }
+        const arrFail = Array.isArray(payload) && payload.length === 0
+        const objFail = typeof payload === 'object' && payload !== null && Object.keys(payload).length === 0
+        if (arrFail || objFail) {
+          helper.msg(`fail to update ${payloadName}, retry ${i + 1} times`, 'warn')
+          await helper.wait(5)
+          continue
+        }
 
-  async updateLastVodIdList() {
-    this.lastVodIdList = await fileSys.getLastVodIdList()
+        helper.msg(`update ${payloadName} successfully`, 'success')
+        updateCb(payload)
+        return
+      } catch (error) {
+        console.error(error)
+        helper.msg(error instanceof Error ? error.message : String(error), 'warn')
+        await helper.wait(5)
+        continue
+      }
+    }
+
+    helper.msg(`fail to update ${payloadName}`, 'error')
   }
   // #endregion
 

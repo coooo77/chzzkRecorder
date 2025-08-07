@@ -155,7 +155,7 @@ const fileSysOri = {
 
     await this.makeDirIfNotExist(dir)
 
-    await fsPromise.writeFile(filePath, JSON.stringify(data), 'utf8')
+    await fsPromise.writeFile(filePath, JSON.stringify(data, null, 2), 'utf8')
   },
 
   async errorHandler(error: any, triggerFnName: string = '', errorLogPath = path.join('error')) {

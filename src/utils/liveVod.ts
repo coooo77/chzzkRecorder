@@ -200,6 +200,10 @@ export default class LiveVod {
 
   async onDownloadVodEnd(item: VodDownloadItem) {
     const vod = this.model.vodDownloadList[item.vodNum]
+    if (!vod) {
+      helper.msg(`no vod info from vod id ${item.vodNum}, channel:${item.channelId}`, 'error')
+      return
+    }
 
     const filePath = this.recorder.getVodFilePath(item)
     if (!fs.existsSync(filePath)) {
