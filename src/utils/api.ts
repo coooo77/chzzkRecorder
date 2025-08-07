@@ -118,17 +118,29 @@ export default class Api {
   }
 
   async getVod(vodNum: number) {
-    const res = await fetch(`https://api.chzzk.naver.com/service/v2/videos/${vodNum}`, { headers: this.headers })
-    const json = (await res.json()) as { content?: VideoWithIsAdult }
-    const vod = json['content'] ?? null
-    return vod
+    try {
+      const res = await fetch(`https://api.chzzk.naver.com/service/v2/videos/${vodNum}`, { headers: this.headers })
+      const json = (await res.json()) as { content?: VideoWithIsAdult }
+      const vod = json['content'] ?? null
+      return vod
+    } catch (error) {
+      console.error(error)
+      helper.msg(`fail to get vod from vod number ${vodNum}`, 'error')
+      return null
+    }
   }
 
   async getVideos(channelId: string) {
-    const res = await fetch(`https://api.chzzk.naver.com/service/v1/channels/${channelId}/videos`, { headers: this.headers })
-    const json = (await res.json()) as { content?: { data: VideoWithIsAdult[] } }
-    const vod = json['content']?.data || null
-    return vod
+    try {
+      const res = await fetch(`https://api.chzzk.naver.com/service/v1/channels/${channelId}/videos`, { headers: this.headers })
+      const json = (await res.json()) as { content?: { data: VideoWithIsAdult[] } }
+      const vod = json['content']?.data || null
+      return vod
+    } catch (error) {
+      console.error(error)
+      helper.msg(`fail to get videos from channel ${channelId}`, 'error')
+      return null
+    }
   }
   //#endregion
 
