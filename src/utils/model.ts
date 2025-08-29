@@ -74,12 +74,12 @@ export default class Model extends EventEmitter<ModelEventMap> {
     this.retryUpdate(this.vodCheckList, fileSys.getVodCheckList.bind(fileSys), (payload) => (this.vodCheckList = payload), 'vod check list')
   }, this.waitMs)
 
-  updateLastVodIdList = debounce(() => {
-    this.retryUpdate(this.vodDownloadList, fileSys.getVodDownloadList.bind(fileSys), (payload) => (this.vodDownloadList = payload), 'last vod id list')
+  updateVodDownloadList = debounce(() => {
+    this.retryUpdate(this.vodDownloadList, fileSys.getVodDownloadList.bind(fileSys), (payload) => (this.vodDownloadList = payload), 'vod download list')
   }, this.waitMs)
 
-  updateVodDownloadList = debounce(() => {
-    this.retryUpdate(this.lastVodIdList, fileSys.getLastVodIdList.bind(fileSys), (payload) => (this.lastVodIdList = payload), 'vod download list')
+  updateLastVodIdList = debounce(() => {
+    this.retryUpdate(this.lastVodIdList, fileSys.getLastVodIdList.bind(fileSys), (payload) => (this.lastVodIdList = payload), 'last vod id list')
   }, this.waitMs)
 
   constructor(...args: ConstructorParameters<typeof EventEmitter>) {

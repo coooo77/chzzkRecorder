@@ -215,8 +215,11 @@ export default class LiveVod {
       if (isSuccess) {
         vod.status = 'success'
 
-        const updateLastVodIdPayload = { [vod.channelId]: vod.vodNum }
-        await this.model.setLastVodIdList(updateLastVodIdPayload)
+        const vodNum = this.model.lastVodIdList[item.channelId]
+        if (!vodNum || (typeof vodNum === 'number' && vodNum < vod.vodNum)) {
+          const updateLastVodIdPayload = { [vod.channelId]: vod.vodNum }
+          await this.model.setLastVodIdList(updateLastVodIdPayload)
+        }
       }
     }
 
