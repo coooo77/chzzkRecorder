@@ -53,6 +53,11 @@ export default class Record extends EventEmitter<EventMap> {
     return `--http-header Cookie="NID_SES=${session};NID_AUT=${auth}"`
   }
 
+  get streamlinkExePath() {
+    const { streamlink } = this.model.appSetting
+    return streamlink || 'streamlink'
+  }
+
   //#region LIVE
   getFilename(setting: UserSetting, liveId: number) {
     return helper
@@ -66,7 +71,7 @@ export default class Record extends EventEmitter<EventMap> {
     const { saveDirectory, useLiveFFmpegOutput } = this.model.appSetting
 
     const sourceUrl = this.api.getSourceUrl(userSetting.channelId)
-    let cmd = `streamlink ${sourceUrl} best `
+    let cmd = `${this.streamlinkExePath} ${sourceUrl} best `
 
     const filename = this.getFilename(userSetting, liveInfo.liveId)
     const filePath = path.join(saveDirectory, `${filename}.ts`)
@@ -133,7 +138,7 @@ export default class Record extends EventEmitter<EventMap> {
 
   getVodDownloadCmd(item: VodDownloadItem) {
     const filePath = this.getVodFilePath(item)
-    let cmd = `streamlink ${item.vodUrl} best -f -o ${filePath}`
+    let cmd = `${this.streamlinkExePath} ${item.vodUrl} best -f -o ${filePath}`
     if (item.adult) cmd += ` ${this.httpCookie}`
     return cmd
   }
@@ -141,12 +146,13 @@ export default class Record extends EventEmitter<EventMap> {
   getVodDownloadItem(vod: VideoWithIsAdult) {
     const vodNum = vod.videoNo
     const userSetting = this.model.userList[vod.channel.channelId]
+    const status = userSetting.manualCheckVod ? 'check' : 'waiting'
 
     const item: VodDownloadItem = {
       vodNum,
+      status,
       tryCount: 0,
       adult: vod.adult,
-      status: 'waiting',
       duration: vod.duration,
       publishDate: vod.publishDate,
       channelId: vod.channel.channelId,
