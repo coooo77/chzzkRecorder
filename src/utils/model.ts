@@ -236,7 +236,8 @@ export default class Model extends EventEmitter<ModelEventMap> {
   }
 
   async retryUpdate<T>(currentData: T, getMethod: () => Promise<T>, updateCb: (payload: T) => void, payloadName: string) {
-    for (let i = 0; i < 3; i++) {
+    const maxTry = 3
+    for (let i = 0; i < maxTry; i++) {
       try {
         const payload = await getMethod()
 
@@ -247,13 +248,17 @@ export default class Model extends EventEmitter<ModelEventMap> {
 
         const arrFail = Array.isArray(payload) && payload.length === 0
         const objFail = typeof payload === 'object' && payload !== null && Object.keys(payload).length === 0
-        if (arrFail || objFail) {
+        const isEmptyPayload = arrFail || objFail
+        const isRetrying = i < maxTry - 1
+        if (isRetrying && isEmptyPayload) {
           helper.msg(`fail to update ${payloadName}, retry ${i + 1} times`, 'warn')
           await helper.wait(5)
           continue
         }
 
-        helper.msg(`update ${payloadName} successfully`, 'success')
+        const msg = isEmptyPayload ? `update empty data to ${payloadName}` : `update ${payloadName} successfully`
+        const status = isEmptyPayload ? 'warn' : 'success'
+        helper.msg(msg, status)
         updateCb(payload)
         return
       } catch (error) {
