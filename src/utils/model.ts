@@ -2,7 +2,7 @@
 import path from 'path'
 import chokidar from 'chokidar'
 import EventEmitter from 'events'
-import { keyBy, pickBy } from 'lodash-es'
+import { keyBy, pickBy, isEqual, debounce } from 'lodash-es'
 
 import { RecordEvent } from './recorder.js'
 
@@ -20,6 +20,7 @@ import type {
   VodCheckInfo,
   VodDownloadList,
   VodDownloadItem,
+  LastVodIdList,
 } from '../interfaces/index.js'
 
 export enum ModelEvent {
@@ -53,6 +54,8 @@ export default class Model extends EventEmitter<ModelEventMap> {
 
   recordingList: RecordingList = {}
 
+  lastVodIdList: LastVodIdList = {}
+
   vodDownloadList: VodDownloadList = {}
 
   MAX_REFRESH_COUNT = 2
@@ -60,6 +63,24 @@ export default class Model extends EventEmitter<ModelEventMap> {
   refreshAuthFailCount = 0
 
   authCookie: AuthCookie = { auth: '', session: '' }
+
+  waitMs = 150
+
+  updateUserList = debounce(() => {
+    this.retryUpdate(this.userList, fileSys.getUsersList.bind(fileSys), (payload) => (this.userList = payload), 'user list')
+  }, this.waitMs)
+
+  updateVodCheckList = debounce(() => {
+    this.retryUpdate(this.vodCheckList, fileSys.getVodCheckList.bind(fileSys), (payload) => (this.vodCheckList = payload), 'vod check list')
+  }, this.waitMs)
+
+  updateVodDownloadList = debounce(() => {
+    this.retryUpdate(this.vodDownloadList, fileSys.getVodDownloadList.bind(fileSys), (payload) => (this.vodDownloadList = payload), 'vod download list')
+  }, this.waitMs)
+
+  updateLastVodIdList = debounce(() => {
+    this.retryUpdate(this.lastVodIdList, fileSys.getLastVodIdList.bind(fileSys), (payload) => (this.lastVodIdList = payload), 'last vod id list')
+  }, this.waitMs)
 
   constructor(...args: ConstructorParameters<typeof EventEmitter>) {
     super(...args)
@@ -75,7 +96,6 @@ export default class Model extends EventEmitter<ModelEventMap> {
   }
 
   // #region User Vod
-
   setVodCheckList(items: VodCheckInfo[]) {
     return this.addPromiseQueue(async () => {
       const newList = keyBy(items, 'checkTime')
@@ -107,9 +127,18 @@ export default class Model extends EventEmitter<ModelEventMap> {
   }
   // #endregion
 
+  // #region last Vod Id List
+  setLastVodIdList(newList: LastVodIdList) {
+    return this.addPromiseQueue(async () => {
+      this.lastVodIdList = Object.assign(this.lastVodIdList, newList)
+      await fileSys.saveJSONFile(fileSys.lastVodIdListPath, this.lastVodIdList)
+    })
+  }
+  // #endregion
+
   //#region Record List
-  async getRecordingList() {
-    this.recordingList = await fileSys.getRecordingList()
+  async getRecordingList(options?: { init: boolean }) {
+    this.recordingList = await fileSys.getRecordingList({ init: !!options?.init })
   }
 
   setRecordList(list: RecordingList) {
@@ -143,7 +172,16 @@ export default class Model extends EventEmitter<ModelEventMap> {
 
   // #region 資料同步
   async init() {
-    await Promise.all([this.updateCookie(), this.updateUserList(), this.getRecordingList(), fileSys.makeDirIfNotExist(this.appSetting.saveDirectory)])
+    await Promise.all([
+      this.updateUserList(),
+      this.updateAppSetting(),
+      this.updateVodCheckList(),
+      this.updateLastVodIdList(),
+      this.updateVodDownloadList(),
+      this.updateCookie({ init: true }),
+      this.getRecordingList({ init: true }),
+      fileSys.makeDirIfNotExist(this.appSetting.saveDirectory),
+    ])
   }
 
   async syncModel() {
@@ -156,8 +194,8 @@ export default class Model extends EventEmitter<ModelEventMap> {
 
   /** 精读《如何利用 Nodejs 监听文件夹》 @see https://tinyurl.com/n9r7p3mk */
   watchModel() {
-    const { cookiePath, appConfigPath, usersListPath, vodCheckListPath, vodDownloadListPath } = fileSys
-    const watchList = [cookiePath, appConfigPath, usersListPath, vodCheckListPath, vodDownloadListPath]
+    const { cookiePath, appConfigPath, usersListPath, vodCheckListPath, vodDownloadListPath, lastVodIdListPath } = fileSys
+    const watchList = [cookiePath, appConfigPath, usersListPath, vodCheckListPath, vodDownloadListPath, lastVodIdListPath]
     const nameMap = Object.fromEntries(watchList.map((p) => [p, path.basename(p)]))
 
     const method = {
@@ -181,6 +219,10 @@ export default class Model extends EventEmitter<ModelEventMap> {
         helper.msg('Vod Download List updated')
         this.updateVodDownloadList()
       },
+      [nameMap[lastVodIdListPath]]: () => {
+        helper.msg('Last Vod Download Id List updated')
+        this.updateLastVodIdList()
+      },
     }
 
     chokidar.watch(watchList).on('change', (p) => {
@@ -193,22 +235,52 @@ export default class Model extends EventEmitter<ModelEventMap> {
     this.appSetting = await fileSys.getAppSetting()
   }
 
-  async updateUserList() {
-    this.userList = await fileSys.getUsersList()
-  }
+  async retryUpdate<T>(currentData: T, getMethod: () => Promise<T>, updateCb: (payload: T) => void, payloadName: string) {
+    const maxTry = 3
+    for (let i = 0; i < maxTry; i++) {
+      try {
+        const payload = await getMethod()
 
-  async updateVodCheckList() {
-    this.vodCheckList = await fileSys.getVodCheckList()
-  }
+        if (isEqual(currentData, payload)) {
+          helper.msg(`update ${payloadName} successfully`, 'success')
+          return
+        }
 
-  async updateVodDownloadList() {
-    this.vodDownloadList = await fileSys.getVodDownloadList()
+        const arrFail = Array.isArray(payload) && payload.length === 0
+        const objFail = typeof payload === 'object' && payload !== null && Object.keys(payload).length === 0
+        const isEmptyPayload = arrFail || objFail
+        const isRetrying = i < maxTry - 1
+        if (isRetrying && isEmptyPayload) {
+          helper.msg(`fail to update ${payloadName}, retry ${i + 1} times`, 'warn')
+          await helper.wait(5)
+          continue
+        }
+
+        const msg = isEmptyPayload ? `update empty data to ${payloadName}` : `update ${payloadName} successfully`
+        const status = isEmptyPayload ? 'warn' : 'success'
+        helper.msg(msg, status)
+        updateCb(payload)
+        return
+      } catch (error) {
+        console.error(error)
+        helper.msg(error instanceof Error ? error.message : String(error), 'warn')
+        await helper.wait(5)
+        continue
+      }
+    }
+
+    helper.msg(`fail to update ${payloadName}`, 'error')
   }
   // #endregion
 
   //#region Cookie
-  async updateCookie() {
-    const cookie = await fileSys.getCookie({ init: true })
+  get cookieIsAvailable() {
+    const { auth, session } = this.authCookie
+    return !!auth && !!session
+  }
+
+  async updateCookie(options?: { init?: boolean }) {
+    const cookie = await fileSys.getCookie({ init: !!options?.init })
     if (cookie.auth && cookie.session) {
       this.authCookie = cookie
     } else {
@@ -218,7 +290,9 @@ export default class Model extends EventEmitter<ModelEventMap> {
 
   async setSession(session: string) {
     this.authCookie.session = session
-    await fileSys.saveJSONFile(fileSys.cookiePath, this.authCookie)
+    const { auth } = this.authCookie
+    const cookieString = `${auth}\r\n${session}`
+    await fileSys.saveTxtFile(fileSys.cookiePath, cookieString)
   }
   //#endregion
 

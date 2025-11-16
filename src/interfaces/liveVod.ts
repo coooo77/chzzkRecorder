@@ -12,3 +12,5 @@ export interface VodCheckInfo extends Pick<UserSetting, 'username' | 'channelId'
 }
 
 export type VodDownloadList = Record<VodDownloadItem['vodNum'], VodDownloadItem>
+
+export type LastVodIdList = Record<UserSetting['channelId'], VodDownloadItem['vodNum']>

@@ -89,7 +89,12 @@ export default class LiveVod {
     }
 
     const videos = await this.api.getVideos(channelId)
-    const lastVodNumber = Array.isArray(videos) && videos.length !== 0 ? Math.max(...videos.map((v) => v.videoNo)) : null
+    const onlineLastVodNumber = Array.isArray(videos) && videos.length !== 0 ? Math.max(...videos.map((v) => v.videoNo)) : null
+    const localLastVodNumber = this.model.lastVodIdList[channelId] || null
+
+    // 如果有紀錄最近下載的 vod，則比較跟線上哪個是最早下載的 vod id，用該 id 判斷要從哪個 vod 開始下載
+    const latVodNumbers = [onlineLastVodNumber, localLastVodNumber].filter((n): n is number => typeof n === 'number')
+    const lastVodNumber = latVodNumbers.length ? Math.min(...latVodNumbers) : null
 
     const { checkUserVodMinutes } = this.model.appSetting
     const checkInterval = checkUserVodMinutes || Array.from({ length: 3 }, (_, i) => 60 * (i + 1))
@@ -138,6 +143,7 @@ export default class LiveVod {
 
         // 找到可下載 VOD 不需再檢查相同類型的 VOD
         if (vidsToDl.length) {
+          // TODO: 過濾實況類型
           const sameChannelIdVodCheckItems = pickBy(this.model.vodCheckList, (i) => i.channelId === channelId)
           await Promise.all([this.setDownloadTask(vidsToDl), this.model.removeVodCheckList(Object.keys(sameChannelIdVodCheckItems).map(Number))])
         }
@@ -175,9 +181,10 @@ export default class LiveVod {
   async vodDownloadTask(item: VodDownloadItem) {
     let isProcessing = true
 
+    const { vodNum } = item
     do {
-      await this.recorder.recordVOD(item)
-      isProcessing = this.model.vodDownloadList[item.vodNum]?.status === 'ongoing'
+      await this.recorder.recordVOD(this.model.vodDownloadList[vodNum])
+      isProcessing = this.model.vodDownloadList[vodNum]?.status === 'ongoing'
       await helper.wait(3)
     } while (isProcessing)
 
@@ -186,13 +193,17 @@ export default class LiveVod {
   // #endregion
 
   // #region 事件監聽
-    async onDownloadVodStart(item: VodDownloadItem) {
-    this.model.vodDownloadList[item.vodNum] = Object.assign(item, { status: 'ongoing'})
+  async onDownloadVodStart(item: VodDownloadItem) {
+    this.model.vodDownloadList[item.vodNum] = Object.assign(item, { status: 'ongoing' })
     await this.model.setVodDownloadList(Object.values(this.model.vodDownloadList))
   }
 
   async onDownloadVodEnd(item: VodDownloadItem) {
     const vod = this.model.vodDownloadList[item.vodNum]
+    if (!vod) {
+      helper.msg(`no vod info from vod id ${item.vodNum}, channel:${item.channelId}`, 'error')
+      return
+    }
 
     const filePath = this.recorder.getVodFilePath(item)
     if (!fs.existsSync(filePath)) {
@@ -200,16 +211,22 @@ export default class LiveVod {
     } else {
       const videoDuration = ffmpeg.getMediaDuration(filePath)
       const isSuccess = item.duration - videoDuration <= this.VALID_DURATION
-      if (isSuccess) vod.status = 'success'
+
+      if (isSuccess) {
+        vod.status = 'success'
+
+        const vodNum = this.model.lastVodIdList[item.channelId]
+        if (!vodNum || (typeof vodNum === 'number' && vodNum < vod.vodNum)) {
+          const updateLastVodIdPayload = { [vod.channelId]: vod.vodNum }
+          await this.model.setLastVodIdList(updateLastVodIdPayload)
+        }
+      }
     }
 
     if (vod.status !== 'success') {
       helper.msg(`Failed to download vod ${item.vodNum}`)
       vod.tryCount++
-    }
-
-    if (vod.tryCount >= this.MAX_RETRY_COUNT) {
-      vod.status = 'failed'
+      if (vod.tryCount >= this.MAX_RETRY_COUNT) vod.status = 'failed'
     }
 
     await this.model.setVodDownloadList(Object.values(this.model.vodDownloadList))

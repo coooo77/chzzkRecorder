@@ -21,6 +21,7 @@ interface DownloadVodParam {
   puppeteer: Puppeteer
 }
 
+/** 執行手動下載 vod */
 export default class DownloadVod {
   api: Api
   model: Model
@@ -99,7 +100,7 @@ export default class DownloadVod {
   }
 
   async onDownloadVodStart(item: VodDownloadItem) {
-    this.vodDownloadList[item.vodNum] = Object.assign(item, { status: 'ongoing'})
+    this.vodDownloadList[item.vodNum] = Object.assign(item, { status: 'ongoing' })
     await this.saveVodDownloadList(this.vodDownloadList)
   }
 
@@ -112,16 +113,13 @@ export default class DownloadVod {
     } else {
       const videoDuration = ffmpeg.getMediaDuration(filePath)
       const isSuccess = item.duration - videoDuration <= this.VALID_DURATION
-      if (isSuccess)vod.status = 'success'
+      if (isSuccess) vod.status = 'success'
     }
 
     if (vod.status !== 'success') {
       helper.msg(`Failed to download vod ${item.vodNum}`)
       vod.tryCount++
-    }
-
-    if (vod.tryCount >= this.MAX_RETRY_COUNT) {
-      vod.status = 'failed'
+      if (vod.tryCount >= this.MAX_RETRY_COUNT) vod.status = 'failed'
     }
 
     await this.saveVodDownloadList(this.vodDownloadList)

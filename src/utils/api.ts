@@ -6,9 +6,8 @@ import helper from './common.js'
 
 import Model from './model.js'
 
-import type { Live } from 'chzzk'
 import type { UserSetting } from '../interfaces/setting.js'
-import type { VideoWithIsAdult } from '../interfaces/common.js'
+import type { VideoWithIsAdult, LiveExtend } from '../interfaces/common.js'
 
 interface ErrorItem {
   cause?: Error
@@ -17,7 +16,7 @@ interface ErrorItem {
 
 const failMsg = ['ENOTFOUND', 'fetch failed']
 
-const searchTag = ['라이브 아트', '아트']
+const searchTag = ['라이브 아트', '아트', '명일방주']
 
 interface ApiParams {
   model: Model
@@ -42,8 +41,9 @@ export default class Api {
   }
 
   get headerWithAuth() {
+    if (!this.model.cookieIsAvailable) throw new Error('No auth cookie')
+
     const { auth, session } = this.model.authCookie
-    if (!auth || !session) throw new Error('No auth cookie')
     return {
       'User-Agent': this.userAgent,
       Cookie: `NID_SES=${session};NID_AUT=${auth}`,
@@ -67,7 +67,7 @@ export default class Api {
     let errorCount = 0
     let isOngoing = true
 
-    const liveStreams: Live[] = []
+    const liveStreams: LiveExtend[] = []
     do {
       try {
         const resp = await this.chzzk.search.lives(tag, { size, offset })
@@ -105,7 +105,7 @@ export default class Api {
     const liveMap = livesArray.flat().reduce((map, live) => {
       map.set(live.channelId, live)
       return map
-    }, new Map<UserSetting['channelId'], Live>())
+    }, new Map<UserSetting['channelId'], LiveExtend>())
 
     return Array.from(liveMap.values())
   }
@@ -117,17 +117,29 @@ export default class Api {
   }
 
   async getVod(vodNum: number) {
-    const res = await fetch(`https://api.chzzk.naver.com/service/v2/videos/${vodNum}`, { headers: this.headers })
-    const json = (await res.json()) as { content?: VideoWithIsAdult }
-    const vod = json['content'] ?? null
-    return vod
+    try {
+      const res = await fetch(`https://api.chzzk.naver.com/service/v2/videos/${vodNum}`, { headers: this.headers })
+      const json = (await res.json()) as { content?: VideoWithIsAdult }
+      const vod = json['content'] ?? null
+      return vod
+    } catch (error) {
+      console.error(error)
+      helper.msg(`fail to get vod from vod number ${vodNum}`, 'error')
+      return null
+    }
   }
 
   async getVideos(channelId: string) {
-    const res = await fetch(`https://api.chzzk.naver.com/service/v1/channels/${channelId}/videos`, { headers: this.headers })
-    const json = (await res.json()) as { content?: { data: VideoWithIsAdult[] } }
-    const vod = json['content']?.data || null
-    return vod
+    try {
+      const res = await fetch(`https://api.chzzk.naver.com/service/v1/channels/${channelId}/videos`, { headers: this.headers })
+      const json = (await res.json()) as { content?: { data: VideoWithIsAdult[] } }
+      const vod = json['content']?.data || null
+      return vod
+    } catch (error) {
+      console.error(error)
+      helper.msg(`fail to get videos from channel ${channelId}`, 'error')
+      return null
+    }
   }
   //#endregion
 
@@ -142,7 +154,7 @@ export default class Api {
 
   async refreshSession() {
     if (this.model.isDisableRefreshAuth) {
-      helper.msg('Reach refresh limit', 'warn')
+      helper.msg('Reach refresh auth cookie limit', 'warn')
       return null
     }
 
