@@ -14,7 +14,8 @@ import LiveVod from './liveVod.js'
 import Recorder from './recorder.js'
 
 // 型別
-import type { Live, LiveDetail } from 'chzzk'
+import type { LiveDetail } from 'chzzk'
+import type { LiveExtend } from '../interfaces/common.js'
 import type { RecordingList, UserSetting } from '../interfaces/setting.js'
 
 interface ErrorItem {
@@ -37,7 +38,7 @@ export default class Main {
   liveVod: LiveVod
   recorder: Recorder
 
-  artLives: Live[] = []
+  artLives: LiveExtend[] = []
 
   SUB_PROCESS_LOOP_TIME = 5 * 60
   SUB_PROCESS_API_REQUEST_TIME = 5 * 3
@@ -106,20 +107,26 @@ export default class Main {
     await Promise.all([this.mpHandleVodCheck(lives), this.mpHandleUserRecording(lives)])
   }
 
-  async mpHandleVodCheck(lives: Live[]) {
+  async mpHandleVodCheck(lives: LiveExtend[]) {
     const onlineUserChannelIds = lives.filter((i) => !!this.model.userList[i.channelId]).map((i) => i.channelId)
     await this.liveVod.checkUseLiveStatus(onlineUserChannelIds, 'main')
   }
 
-  mpHandleUserRecording(lives: Live[]) {
+  mpHandleUserRecording(lives: LiveExtend[]) {
     const livesToRecord = lives.reduce((acc, live) => {
-      const { channelId } = live
+      const { channelId, krOnlyViewing } = live
 
       const user = this.model.userList[channelId]
       if (!user) return acc
 
-      const recordingUser = this.model.recordingList[channelId]
       const streamUrl = this.api.getSourceUrl(channelId)
+
+      if (krOnlyViewing) {
+        helper.msg(`The live stream of ${user.username} is korea exclusive, url: ${streamUrl}`)
+        return acc
+      }
+
+      const recordingUser = this.model.recordingList[channelId]
 
       if (recordingUser) {
         helper.msg(`Recording ${recordingUser.username} at ${streamUrl}`)
@@ -133,7 +140,7 @@ export default class Main {
 
       acc.push([live, user])
       return acc
-    }, [] as [Live, UserSetting][])
+    }, [] as [LiveExtend, UserSetting][])
 
     livesToRecord.forEach((payload) => this.recorder.emit(RecordEvent.RECORD_LIVE_START, ...payload))
   }

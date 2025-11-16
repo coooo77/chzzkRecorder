@@ -6,9 +6,8 @@ import helper from './common.js'
 
 import Model from './model.js'
 
-import type { Live } from 'chzzk'
 import type { UserSetting } from '../interfaces/setting.js'
-import type { VideoWithIsAdult } from '../interfaces/common.js'
+import type { VideoWithIsAdult, LiveExtend } from '../interfaces/common.js'
 
 interface ErrorItem {
   cause?: Error
@@ -17,7 +16,7 @@ interface ErrorItem {
 
 const failMsg = ['ENOTFOUND', 'fetch failed']
 
-const searchTag = ['라이브 아트', '아트']
+const searchTag = ['라이브 아트', '아트', '명일방주']
 
 interface ApiParams {
   model: Model
@@ -68,7 +67,7 @@ export default class Api {
     let errorCount = 0
     let isOngoing = true
 
-    const liveStreams: Live[] = []
+    const liveStreams: LiveExtend[] = []
     do {
       try {
         const resp = await this.chzzk.search.lives(tag, { size, offset })
@@ -106,7 +105,7 @@ export default class Api {
     const liveMap = livesArray.flat().reduce((map, live) => {
       map.set(live.channelId, live)
       return map
-    }, new Map<UserSetting['channelId'], Live>())
+    }, new Map<UserSetting['channelId'], LiveExtend>())
 
     return Array.from(liveMap.values())
   }
