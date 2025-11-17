@@ -82,6 +82,10 @@ export default class Model extends EventEmitter<ModelEventMap> {
     this.retryUpdate(this.lastVodIdList, fileSys.getLastVodIdList.bind(fileSys), (payload) => (this.lastVodIdList = payload), 'last vod id list')
   }, this.waitMs)
 
+  updateAppSetting = debounce(() => {
+    this.retryUpdate(this.appSetting, fileSys.getAppSetting.bind(fileSys), (payload) => (this.appSetting = payload), 'app setting')
+  }, this.waitMs)
+
   constructor(...args: ConstructorParameters<typeof EventEmitter>) {
     super(...args)
 
@@ -229,10 +233,6 @@ export default class Model extends EventEmitter<ModelEventMap> {
       const name = nameMap[p]
       if (name in method) method[name as keyof typeof method]()
     })
-  }
-
-  async updateAppSetting() {
-    this.appSetting = await fileSys.getAppSetting()
   }
 
   async retryUpdate<T>(currentData: T, getMethod: () => Promise<T>, updateCb: (payload: T) => void, payloadName: string) {
