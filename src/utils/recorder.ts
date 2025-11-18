@@ -1,4 +1,5 @@
 'use strict'
+import fs from 'fs'
 import path from 'path'
 import cp from 'child_process'
 import EventEmitter from 'events'
@@ -50,12 +51,19 @@ export default class Record extends EventEmitter<EventMap> {
 
   get httpCookie() {
     const { auth, session } = this.model.authCookie
-    return `--http-header Cookie="NID_SES=${session};NID_AUT=${auth}"`
+    return `--http-header "Cookie=NID_SES=${session};NID_AUT=${auth}"`
   }
 
   get streamlinkExePath() {
-    const { streamlink } = this.model.appSetting
-    return streamlink || 'streamlink'
+    try {
+      const { streamlink } = this.model.appSetting
+      const isExist = streamlink && fs.existsSync(streamlink)
+      return isExist ? path.normalize(streamlink) : 'streamlink'
+    } catch (error) {
+      const errMsg = error instanceof Error ? error.message : String(error)
+      helper.msg(errMsg, 'error')
+      return 'streamlink'
+    }
   }
 
   //#region LIVE
@@ -71,14 +79,14 @@ export default class Record extends EventEmitter<EventMap> {
     const { saveDirectory, useLiveFFmpegOutput } = this.model.appSetting
 
     const sourceUrl = this.api.getSourceUrl(userSetting.channelId)
-    let cmd = `${this.streamlinkExePath} ${sourceUrl} best `
+    let cmd = `"${this.streamlinkExePath}" ${sourceUrl} best `
 
     const filename = this.getFilename(userSetting, liveInfo.liveId)
     const filePath = path.join(saveDirectory, `${filename}.ts`)
     const output = useLiveFFmpegOutput ? '-O | ffmpeg -i pipe:0 -c copy' : '-o'
     if (liveInfo.adult) cmd += `${this.httpCookie} `
 
-    cmd += `${output} ${filePath}`
+    cmd += `${output} "${filePath}"`
     return cmd
   }
 
@@ -138,7 +146,7 @@ export default class Record extends EventEmitter<EventMap> {
 
   getVodDownloadCmd(item: VodDownloadItem) {
     const filePath = this.getVodFilePath(item)
-    let cmd = `${this.streamlinkExePath} ${item.vodUrl} best -f -o ${filePath}`
+    let cmd = `"${this.streamlinkExePath}" ${item.vodUrl} best -f -o "${filePath}"`
     if (item.adult) cmd += ` ${this.httpCookie}`
     return cmd
   }
