@@ -114,14 +114,14 @@ export default class Main {
 
   mpHandleUserRecording(lives: LiveExtend[]) {
     const livesToRecord = lives.reduce((acc, live) => {
-      const { channelId, krOnlyViewing } = live
+      const { channelId, blindType } = live
 
       const user = this.model.userList[channelId]
       if (!user) return acc
 
       const streamUrl = this.api.getSourceUrl(channelId)
 
-      if (krOnlyViewing) {
+      if (blindType) {
         helper.msg(`The live stream of ${user.username} is korea exclusive, url: ${streamUrl}`)
         return acc
       }

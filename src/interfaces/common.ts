@@ -9,5 +9,5 @@ export type IdList = Record<Channel['channelId'], CustomUserName>
 export type VideoWithIsAdult = BaseVideo & { adult: boolean }
 
 export interface LiveExtend extends Live {
-  krOnlyViewing?: boolean
+  blindType?: null | 'ABROAD'
 }
