@@ -71,6 +71,8 @@ export interface AppSettings {
 
 export interface OnlineUser {
   pid?: number
+  /** skip recording online stream */
+  isSkip: boolean
   startAt: string
   username: string
   controllable: boolean

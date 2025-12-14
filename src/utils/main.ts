@@ -5,7 +5,6 @@ import findProcess from 'find-process'
 
 // 內部方法
 import helper from './common.js'
-import { RecordEvent } from './recorder.js'
 
 // Class
 import Api from './api.js'
@@ -16,7 +15,7 @@ import Recorder from './recorder.js'
 // 型別
 import type { LiveDetail } from 'chzzk'
 import type { LiveExtend } from '../interfaces/common.js'
-import type { RecordingList, UserSetting } from '../interfaces/setting.js'
+import type { OnlineUser, RecordingList, UserSetting } from '../interfaces/setting.js'
 
 interface ErrorItem {
   cause?: Error
@@ -43,6 +42,9 @@ export default class Main {
   SUB_PROCESS_LOOP_TIME = 5 * 60
   SUB_PROCESS_API_REQUEST_TIME = 5 * 3
 
+  CHECK_SKIP_CHANNEL_TIME = 5 * 60
+  CHECK_SKIP_LIVE_TIME = 30 * 60
+
   constructor({ api, model, recorder, liveVod }: MainParams) {
     this.api = api
     this.model = model
@@ -50,10 +52,31 @@ export default class Main {
     this.recorder = recorder
   }
 
+  // #region 共用邏輯
   async isLiveRunning(userName: string) {
     const result = await findProcess('name', userName)
     return !!result.length && result.some((i) => i.cmd.includes('https://chzzk.naver.com/live'))
   }
+
+  async iterationTask(task: () => Promise<void>, taskName: string, waitTime: number) {
+    while (true) {
+      try {
+        await task()
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error)
+        helper.msg(`An error occurred in ${taskName}: ${msg}`, 'error')
+      }
+
+      await helper.wait(waitTime)
+    }
+  }
+
+  onlineUserMessage(user: OnlineUser, streamUrl: string) {
+    const msg = user.isSkip ? `${user.username}'s stream is skipped at ${streamUrl}` : `Recording ${user.username} at ${streamUrl}`
+
+    helper.msg(msg)
+  }
+  // #endregion
 
   //#region 斷線處理
   async checkAliveRecord() {
@@ -88,7 +111,7 @@ export default class Main {
         delete disconnectRecordingList[channelId]
         delete this.model.recordingList[channelId]
 
-        await this.model.setRecordList(this.model.recordingList)
+        await Promise.all([this.liveVod.updateUserVodInfo(channelId), this.model.setRecordList(this.model.recordingList)])
       }
 
       await helper.wait(appSetting.checkIntervalSec)
@@ -117,6 +140,7 @@ export default class Main {
       const { channelId, blindType } = live
 
       const user = this.model.userList[channelId]
+
       if (!user) return acc
 
       const streamUrl = this.api.getSourceUrl(channelId)
@@ -129,7 +153,7 @@ export default class Main {
       const recordingUser = this.model.recordingList[channelId]
 
       if (recordingUser) {
-        helper.msg(`Recording ${recordingUser.username} at ${streamUrl}`)
+        this.onlineUserMessage(recordingUser, channelId)
         return acc
       }
 
@@ -142,20 +166,21 @@ export default class Main {
       return acc
     }, [] as [LiveExtend, UserSetting][])
 
-    livesToRecord.forEach((payload) => this.recorder.emit(RecordEvent.RECORD_LIVE_START, ...payload))
+    livesToRecord.forEach((payload) => this.recorder.recordLiveStream(...payload))
   }
 
   async mainProcess() {
-    helper.msg(`Checking Users at ${new Date().toLocaleString()}`, 'title')
+    this.iterationTask(
+      async () => {
+        helper.msg(`Checking Users at ${new Date().toLocaleString()}`, 'title')
 
-    if (!this.model.cookieIsAvailable) helper.msg('no cookie available', 'warn')
+        if (!this.model.cookieIsAvailable) helper.msg('no cookie available', 'warn')
 
-    await this.checkUsersByStreamTag()
-
-    await helper.wait(this.model.appSetting.checkIntervalSec)
-
-    this.mainProcess()
-    this.liveVod.checkVodList()
+        await this.checkUsersByStreamTag()
+      },
+      'Main Process',
+      this.model.appSetting.checkIntervalSec
+    )
   }
   //#endregion
 
@@ -198,8 +223,7 @@ export default class Main {
         if (recordingUser) {
           onlineChannelIds.push(channelId)
 
-          const { username } = recordingUser
-          helper.msg(`Recording ${username} at ${streamUrl}`)
+          this.onlineUserMessage(recordingUser, channelId)
           continue
         }
 
@@ -251,19 +275,73 @@ export default class Main {
   }
 
   spHandleUserRecording(livesToRecord: [LiveDetail, UserSetting][]) {
-    livesToRecord.forEach((item) => this.recorder.emit(RecordEvent.RECORD_LIVE_START, ...item))
+    livesToRecord.forEach((item) => this.recorder.recordLiveStream(...item))
   }
 
   async subProcess() {
-    helper.msg(`Checking Users by channelId at ${new Date().toLocaleString()}`, 'title')
+    this.iterationTask(
+      async () => {
+        helper.msg(`Checking Users by channelId at ${new Date().toLocaleString()}`, 'title')
 
-    await this.searchUsersById()
-
-    await helper.wait(this.SUB_PROCESS_LOOP_TIME)
-
-    this.subProcess()
+        await this.searchUsersById()
+      },
+      'sub Process',
+      this.SUB_PROCESS_LOOP_TIME
+    )
   }
   //#endregion
+
+  // #region 略過實況處理，清除已經結束的實況
+  async checkSkipLive() {
+    helper.msg('check skip live', 'title')
+
+    const recordings = Object.entries(this.model.recordingList)
+
+    if (recordings.length === 0) return
+
+    const removeChannelIds: string[] = []
+
+    for (const [channelId, record] of recordings) {
+      if (!record.isSkip) continue
+      if (!this.model.recordingList[channelId]) continue
+
+      const res = await this.api.getLiveDetail(channelId)
+      if (!res || res.status === 'OPEN') continue
+
+      removeChannelIds.push(channelId)
+
+      helper.msg(`user: ${record.username} is offline, removed from recording list`)
+
+      await helper.wait(this.CHECK_SKIP_CHANNEL_TIME)
+    }
+
+    if (removeChannelIds.length === 0) return
+
+    await this.model.removeRecordList(removeChannelIds)
+  }
+
+  async skipLiveProcess() {
+    this.iterationTask(
+      async () => {
+        await this.checkSkipLive()
+      },
+      'Check Skip Live Process',
+      this.CHECK_SKIP_LIVE_TIME
+    )
+  }
+  // #endregion
+
+  // #region VOD 檢查
+  async vodProcess() {
+    this.iterationTask(
+      async () => {
+        await this.liveVod.checkVodList()
+      },
+      'Vod Process',
+      this.model.appSetting.checkIntervalSec
+    )
+  }
+  // #endregion
 
   //#region Entry
   async start() {
@@ -276,6 +354,8 @@ export default class Main {
 
     this.mainProcess()
     this.subProcess()
+    this.vodProcess()
+    this.skipLiveProcess()
     this.monitorDisconnectRecord(disconnectRecordingList)
   }
   //#endregion

@@ -5,7 +5,7 @@ import cp from 'child_process'
 import EventEmitter from 'events'
 
 import helper from './common.js'
-import { ModelEvent } from './model.js'
+// import { ModelEvent } from './model.js'
 
 import Api from './api.js'
 import Model from './model.js'
@@ -15,9 +15,12 @@ import type { UserSetting, VideoWithIsAdult, VodDownloadItem } from '../interfac
 
 export enum RecordEvent {
   RECORD_LIVE_START = 'record-live-start',
+  RECORD_LIVE_END = 'record-live-end',
   DOWNLOAD_VOD_END = 'download-vod-end',
   DOWNLOAD_VOD_START = 'download-vod-start',
 }
+
+type Pid = number | undefined
 
 /**
  * @see https://www.youtube.com/watch?v=Pl7pDjWd830
@@ -27,7 +30,8 @@ export enum RecordEvent {
 interface EventMap {
   [RecordEvent.DOWNLOAD_VOD_END]: [VodDownloadItem]
   [RecordEvent.DOWNLOAD_VOD_START]: [VodDownloadItem]
-  [RecordEvent.RECORD_LIVE_START]: [LiveInfo, UserSetting]
+  [RecordEvent.RECORD_LIVE_END]: [UserSetting]
+  [RecordEvent.RECORD_LIVE_START]: [UserSetting, Pid]
 }
 
 interface RecordParams {
@@ -45,8 +49,6 @@ export default class Record extends EventEmitter<EventMap> {
 
     this.api = api
     this.model = model
-
-    this.on(RecordEvent.RECORD_LIVE_START, this.recordLiveStream)
   }
 
   get httpCookie() {
@@ -58,7 +60,7 @@ export default class Record extends EventEmitter<EventMap> {
     try {
       const { streamlink } = this.model.appSetting
       const isExist = streamlink && fs.existsSync(streamlink)
-      return isExist ? path.normalize(streamlink) : 'streamlink'
+      return isExist ? `"${path.normalize(streamlink)}"` : 'streamlink'
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : String(error)
       helper.msg(errMsg, 'error')
@@ -79,7 +81,7 @@ export default class Record extends EventEmitter<EventMap> {
     const { saveDirectory, useLiveFFmpegOutput } = this.model.appSetting
 
     const sourceUrl = this.api.getSourceUrl(userSetting.channelId)
-    let cmd = `"${this.streamlinkExePath}" ${sourceUrl} best `
+    let cmd = `${this.streamlinkExePath} ${sourceUrl} best `
 
     const filename = this.getFilename(userSetting, liveInfo.liveId)
     const filePath = path.join(saveDirectory, `${filename}.ts`)
@@ -110,16 +112,17 @@ export default class Record extends EventEmitter<EventMap> {
 
     const spawnFn = () => {
       helper.msg(`start to record user ${setting.username}`)
-      this.model.emit(ModelEvent.ADD_RECORD_LIST, setting, task?.pid)
+      this.emit(RecordEvent.RECORD_LIVE_START, setting, task?.pid)
     }
 
     const closeFn = () => {
       helper.msg(`user ${setting.username} is offline`)
 
-      this.model.emit(ModelEvent.REMOVE_RECORD_LIST, setting.channelId)
       task?.off('spawn', spawnFn)
       task?.off('close', closeFn)
       task = null
+
+      this.emit(RecordEvent.RECORD_LIVE_END, setting)
     }
 
     task.on('spawn', spawnFn)

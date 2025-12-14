@@ -6,10 +6,11 @@ import { keyBy, pickBy, isEqual, debounce } from 'lodash-es'
 
 import { RecordEvent } from './recorder.js'
 
+import Recorder from './recorder.js'
+
 import helper from './common.js'
 import fileSys from './fileSys.js'
 
-import type { Live } from 'chzzk'
 import type {
   UsersList,
   AuthCookie,
@@ -36,9 +37,8 @@ type Pid = number | undefined
  * @see https://stackoverflow.com/questions/67243592/typescript-adding-types-to-eventemitter
  */
 export interface ModelEventMap {
-  [RecordEvent.RECORD_LIVE_START]: [Live]
   [ModelEvent.ADD_RECORD_LIST]: [UserSetting, Pid]
-  [ModelEvent.REMOVE_RECORD_LIST]: [UserSetting['channelId']]
+  [ModelEvent.REMOVE_RECORD_LIST]: [UserSetting[]]
 }
 
 export default class Model extends EventEmitter<ModelEventMap> {
@@ -86,18 +86,32 @@ export default class Model extends EventEmitter<ModelEventMap> {
     this.retryUpdate(this.appSetting, fileSys.getAppSetting.bind(fileSys), (payload) => (this.appSetting = payload), 'app setting')
   }, this.waitMs)
 
+  updateRecordingList = debounce(() => {
+    this.retryUpdate(this.recordingList, fileSys.getRecordingList.bind(fileSys), (payload) => (this.recordingList = payload), 'recording list')
+  }, this.waitMs)
+
   constructor(...args: ConstructorParameters<typeof EventEmitter>) {
     super(...args)
 
     this.appSetting = fileSys.getAppSettingSync()
-
-    this.on(ModelEvent.ADD_RECORD_LIST, this.addRecordList)
-    this.on(ModelEvent.REMOVE_RECORD_LIST, this.removeRecordList)
   }
 
   get isDisableRefreshAuth() {
     return this.refreshAuthFailCount > this.MAX_REFRESH_COUNT
   }
+
+  // #region recorder event
+  listRecordEvent(recorder: Recorder) {
+    recorder.on(RecordEvent.RECORD_LIVE_START, this.addRecordList)
+
+    recorder.on(RecordEvent.RECORD_LIVE_END, (setting) => {
+      const record = this.recordingList[setting.channelId]
+      if (record && record.isSkip) return
+
+      this.removeRecordList(setting)
+    })
+  }
+  // #endregion
 
   // #region User Vod
   setVodCheckList(items: VodCheckInfo[]) {
@@ -152,9 +166,12 @@ export default class Model extends EventEmitter<ModelEventMap> {
     })
   }
 
-  removeRecordList(channelId: string) {
+  removeRecordList(settings: UserSetting | UserSetting[]) {
     return this.addPromiseQueue(async () => {
-      delete this.recordingList[channelId]
+      const list = Array.isArray(settings) ? settings : [settings]
+
+      list.forEach((setting) => delete this.recordingList[setting.channelId])
+
       await this.setRecordList(this.recordingList)
     })
   }
@@ -163,6 +180,7 @@ export default class Model extends EventEmitter<ModelEventMap> {
     return this.addPromiseQueue(async () => {
       this.recordingList[setting.channelId] = {
         pid,
+        isSkip: false,
         controllable: true,
         username: setting.username,
         startAt: new Date().toJSON(),
@@ -198,8 +216,8 @@ export default class Model extends EventEmitter<ModelEventMap> {
 
   /** 精读《如何利用 Nodejs 监听文件夹》 @see https://tinyurl.com/n9r7p3mk */
   watchModel() {
-    const { cookiePath, appConfigPath, usersListPath, vodCheckListPath, vodDownloadListPath, lastVodIdListPath } = fileSys
-    const watchList = [cookiePath, appConfigPath, usersListPath, vodCheckListPath, vodDownloadListPath, lastVodIdListPath]
+    const { cookiePath, appConfigPath, usersListPath, vodCheckListPath, vodDownloadListPath, lastVodIdListPath, recordingListPath } = fileSys
+    const watchList = [cookiePath, appConfigPath, usersListPath, vodCheckListPath, vodDownloadListPath, lastVodIdListPath, recordingListPath]
     const nameMap = Object.fromEntries(watchList.map((p) => [p, path.basename(p)]))
 
     const method = {
@@ -218,6 +236,10 @@ export default class Model extends EventEmitter<ModelEventMap> {
       [nameMap[vodCheckListPath]]: () => {
         helper.msg('Vod Check List updated')
         this.updateVodCheckList()
+      },
+      [nameMap[recordingListPath]]: () => {
+        helper.msg('Recording List updated')
+        this.updateRecordingList()
       },
       [nameMap[vodDownloadListPath]]: () => {
         helper.msg('Vod Download List updated')

@@ -10,4 +10,6 @@ const recorder = new Recorder({ api, model })
 const liveVod = new LiveVod({ api, model, recorder })
 const main = new Main({ api, model, recorder, liveVod })
 
+model.listRecordEvent(recorder)
+
 main.start()
