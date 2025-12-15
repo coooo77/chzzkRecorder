@@ -149,7 +149,7 @@ export default class Record extends EventEmitter<EventMap> {
 
   getVodDownloadCmd(item: VodDownloadItem) {
     const filePath = this.getVodFilePath(item)
-    let cmd = `"${this.streamlinkExePath}" ${item.vodUrl} best -f -o "${filePath}"`
+    let cmd = `${this.streamlinkExePath} ${item.vodUrl} best -f -o "${filePath}"`
     if (item.adult) cmd += ` ${this.httpCookie}`
     return cmd
   }
@@ -157,7 +157,7 @@ export default class Record extends EventEmitter<EventMap> {
   getVodDownloadItem(vod: VideoWithIsAdult) {
     const vodNum = vod.videoNo
     const userSetting = this.model.userList[vod.channel.channelId]
-    const status = userSetting.manualCheckVod ? 'check' : 'waiting'
+    const status = userSetting?.manualCheckVod ? 'check' : 'waiting'
 
     const item: VodDownloadItem = {
       vodNum,
