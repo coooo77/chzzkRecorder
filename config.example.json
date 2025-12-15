@@ -1,5 +1,8 @@
 {
   "checkIntervalSec": 30,
+  "ffmpeg": "path/to/bin/ffmpeg.exe",
+  "ffprobe": "path/to/bin/ffprobe.exe",
+  "streamlink": "path/to/bin/streamlink.exe",
   "filenameTemplate": "{username}_{id}_Chzzk_{year}{month}{day}_{hr}{min}{sec}",
   "filenameVodTemplate": "{username}_{id}_ChzzkVod_{vodNum}_{year}{month}{day}_{hr}{min}{sec}_{duration}",
   "saveDirectory": "D:/Path/to/folder",
