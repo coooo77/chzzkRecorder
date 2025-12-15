@@ -1,11 +1,19 @@
 'use strict'
 
+import path from 'path'
 import chalk from 'chalk'
+import fs from 'fs/promises'
 
 /** types */
 import { LogMsgType } from '../interfaces/common.js'
 
 export default {
+  async saveErrorLog(error: unknown, extraInfo?: any) {
+    const message = error instanceof Error ? error.message : String(error)
+    const stack = error instanceof Error ? error.stack : null
+    await fs.writeFile(path.join(`./error-log-${Date.now()}.json`), JSON.stringify({ message, stack, extraInfo }, undefined, 2))
+  },
+
   msg(msg: string, msgType: LogMsgType = 'info') {
     const { log } = console
 

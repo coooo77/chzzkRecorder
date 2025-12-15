@@ -52,7 +52,7 @@ export default class DownloadVod {
   //#region 資料存取
   async getVodList() {
     const videoIdOrUrls = await fileSys.getOrDefaultValue<(number | string)[]>(this.vodListPath, [])
-    return videoIdOrUrls.map(this.getVodId).sort()
+    return videoIdOrUrls.map(DownloadVod.getVodId).sort()
   }
 
   async getVodDownloadList() {
@@ -80,7 +80,7 @@ export default class DownloadVod {
     }
   }
 
-  getVodId(vodId: string | number) {
+  static getVodId(vodId: string | number) {
     if (typeof vodId === 'number') return vodId
     const vodUrlRegex = /^https:\/\/chzzk.naver.com\/video\/([0-9]*)/
     const match = vodUrlRegex.exec(vodId)

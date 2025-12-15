@@ -102,13 +102,15 @@ export default class Model extends EventEmitter<ModelEventMap> {
 
   // #region recorder event
   listRecordEvent(recorder: Recorder) {
-    recorder.on(RecordEvent.RECORD_LIVE_START, this.addRecordList)
+    recorder.on(RecordEvent.RECORD_LIVE_START, (setting) => {
+      this.addRecordList(setting)
+    })
 
     recorder.on(RecordEvent.RECORD_LIVE_END, (setting) => {
       const record = this.recordingList[setting.channelId]
       if (record && record.isSkip) return
 
-      this.removeRecordList(setting)
+      this.removeRecordList(setting.channelId)
     })
   }
   // #endregion
@@ -166,11 +168,11 @@ export default class Model extends EventEmitter<ModelEventMap> {
     })
   }
 
-  removeRecordList(settings: UserSetting | UserSetting[]) {
+  removeRecordList(channelIds: string | string[]) {
     return this.addPromiseQueue(async () => {
-      const list = Array.isArray(settings) ? settings : [settings]
+      const list = Array.isArray(channelIds) ? channelIds : [channelIds]
 
-      list.forEach((setting) => delete this.recordingList[setting.channelId])
+      list.forEach((channelId) => delete this.recordingList[channelId])
 
       await this.setRecordList(this.recordingList)
     })
@@ -191,6 +193,15 @@ export default class Model extends EventEmitter<ModelEventMap> {
     })
   }
   //#endregion
+
+  // #region user list
+  async setUserList(users: UsersList) {
+    return this.addPromiseQueue(async () => {
+      this.userList = Object.assign(users, this.userList)
+      await fileSys.saveJSONFile(fileSys.usersListPath, this.userList)
+    })
+  }
+  // #endregion
 
   // #region 資料同步
   async init() {
