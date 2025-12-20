@@ -23,7 +23,10 @@ export default class VodController {
       }
 
       // 資料取得
-      const vodNumbers = list.filter((i) => ['string', 'number'].includes(typeof i)).map(Vod.getVodId)
+      const vodNumbers = list
+        .filter((i) => ['string', 'number'].includes(typeof i))
+        .map(Vod.getVodId)
+        .filter((vodNum) => !this.model.vodDownloadList[vodNum])
 
       const vodItems: VideoWithIsAdult[] = []
 

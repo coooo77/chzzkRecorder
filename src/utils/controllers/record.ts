@@ -62,6 +62,11 @@ export default class RecordController {
       const liveDetails = new Map<string, LiveDetail | null>()
 
       for (const channelId of userChannelIds) {
+        if (this.model.recordingList[channelId]) {
+          helper.msg(`channel ${channelId} is recording, skip recording`)
+          continue
+        }
+
         try {
           const res = await this.api.getLiveDetail(channelId)
 
