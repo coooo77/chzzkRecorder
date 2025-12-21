@@ -67,6 +67,8 @@ export interface AppSettings {
   ffprobe?: string
   // path of streamlink.exe file, it'll be "streamlink" if not be provided
   streamlink?: string
+  // extra tags to search, default value '라이브 아트', '아트'
+  searchTags?: string[]
 }
 
 export interface OnlineUser {

@@ -16,7 +16,7 @@ interface ErrorItem {
 
 const failMsg = ['ENOTFOUND', 'fetch failed']
 
-const searchTag = ['라이브 아트', '아트', '명일방주']
+const defaultSearchTag = ['라이브 아트', '아트']
 
 interface ApiParams {
   model: Model
@@ -48,6 +48,12 @@ export default class Api {
       'User-Agent': this.userAgent,
       Cookie: `NID_SES=${session};NID_AUT=${auth}`,
     }
+  }
+
+  get searchTags() {
+    const extraTags = this.model.appSetting.searchTags
+    if (!Array.isArray(extraTags) || extraTags.length === 0) return defaultSearchTag
+    return Array.from(new Set([...defaultSearchTag, ...extraTags]))
   }
 
   constructor({ model, chzzkParams = [] }: ApiParams) {
@@ -100,7 +106,7 @@ export default class Api {
   }
 
   async searchLives() {
-    const livesArray = await Promise.all(searchTag.map((tag) => this.getOnlineUserByTag(tag)))
+    const livesArray = await Promise.all(this.searchTags.map((tag) => this.getOnlineUserByTag(tag)))
 
     const liveMap = livesArray.flat().reduce((map, live) => {
       map.set(live.channelId, live)
