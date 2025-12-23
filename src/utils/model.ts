@@ -41,6 +41,8 @@ export interface ModelEventMap {
   [ModelEvent.REMOVE_RECORD_LIST]: [UserSetting[]]
 }
 
+const defaultSearchTag = ['라이브 아트', '아트']
+
 export default class Model extends EventEmitter<ModelEventMap> {
   isWatchOn = false
 
@@ -94,6 +96,14 @@ export default class Model extends EventEmitter<ModelEventMap> {
     super(...args)
 
     this.appSetting = fileSys.getAppSettingSync()
+  }
+
+  get searchTags() {
+    const extraTags = Object.values(this.userList)
+      .filter((user) => !this.recordingList[user.channelId])
+      .flatMap((i) => i.searchTags || [])
+
+    return Array.from(new Set([...defaultSearchTag, ...extraTags]))
   }
 
   get isDisableRefreshAuth() {

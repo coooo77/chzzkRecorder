@@ -16,8 +16,6 @@ interface ErrorItem {
 
 const failMsg = ['ENOTFOUND', 'fetch failed']
 
-const defaultSearchTag = ['라이브 아트', '아트']
-
 interface ApiParams {
   model: Model
   chzzkParams?: ConstructorParameters<typeof ChzzkClient>
@@ -50,12 +48,6 @@ export default class Api {
     }
   }
 
-  get searchTags() {
-    const extraTags = this.model.appSetting.searchTags
-    if (!Array.isArray(extraTags) || extraTags.length === 0) return defaultSearchTag
-    return Array.from(new Set([...defaultSearchTag, ...extraTags]))
-  }
-
   constructor({ model, chzzkParams = [] }: ApiParams) {
     this.model = model
     this.chzzk = new ChzzkClient(...chzzkParams)
@@ -83,7 +75,7 @@ export default class Api {
         offset += size
         isOngoing = resp.size !== 0
 
-        await helper.wait(10)
+        if (isOngoing) await helper.wait(10)
       } catch (error) {
         const err = error as ErrorItem
 
@@ -105,8 +97,16 @@ export default class Api {
     return liveStreams
   }
 
-  async searchLives() {
-    const livesArray = await Promise.all(this.searchTags.map((tag) => this.getOnlineUserByTag(tag)))
+  async searchLives(tags: string[]) {
+    const livesArray = await tags.reduce(async (acc, tag) => {
+      const responses = await acc
+
+      const res = await this.getOnlineUserByTag(tag)
+      responses.push(...res)
+      await helper.wait(10)
+
+      return responses
+    }, Promise.resolve([]) as Promise<LiveExtend[]>)
 
     const liveMap = livesArray.flat().reduce((map, live) => {
       map.set(live.channelId, live)

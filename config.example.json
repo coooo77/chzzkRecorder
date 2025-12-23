@@ -10,10 +10,6 @@
   "proactiveSearch": true,
   "useLiveFFmpegOutput": true,
   "dlVodConcurrency": 2,
-  "searchTags": [
-    "name_of_tag_1",
-    "name_of_tag_2"
-  ],
   "checkUserVodMinutes": [
     60,
     360,

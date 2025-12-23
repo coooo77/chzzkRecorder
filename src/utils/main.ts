@@ -123,7 +123,7 @@ export default class Main {
 
   //#region 主程序 檢查 tag
   async checkUsersByStreamTag() {
-    const lives = await this.api.searchLives()
+    const lives = await this.api.searchLives(this.model.searchTags)
 
     this.artLives = lives
 

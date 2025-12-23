@@ -11,24 +11,28 @@ export interface UserSettingConstructor {
   enableAutoDownloadVod?: boolean
   // user must check vod manually and change status to "waiting" to start downloading vod
   manualCheckVod?: boolean
+  // extra tags for searching users, skipping stream once users are streaming
+  searchTags?: string[]
 }
 
 export class UserSetting {
   username: string
   channelId: string
   channelName: string
-  allowCategory: string[] = ['Live_Art', 'art']
-  skipCategoryCheck?: boolean
+  searchTags?: string[]
   manualCheckVod?: boolean
+  skipCategoryCheck?: boolean
   disableRecord?: boolean = true
   enableAutoDownloadVod?: boolean = false
+  allowCategory: string[] = ['Live_Art', 'art']
 
   constructor(setting: UserSettingConstructor) {
-    const { username, channelId, channelName, disableRecord, allowCategory, enableAutoDownloadVod, manualCheckVod } = setting
+    const { username, channelId, channelName, disableRecord, allowCategory, enableAutoDownloadVod, manualCheckVod, searchTags } = setting
 
     this.username = username
     this.channelId = channelId
     this.channelName = channelName
+    if (Array.isArray(searchTags)) this.searchTags = searchTags
     if (disableRecord !== undefined) this.disableRecord = disableRecord
     if (Array.isArray(allowCategory)) this.allowCategory = allowCategory
     if (manualCheckVod !== undefined) this.manualCheckVod = manualCheckVod
@@ -67,8 +71,6 @@ export interface AppSettings {
   ffprobe?: string
   // path of streamlink.exe file, it'll be "streamlink" if not be provided
   streamlink?: string
-  // extra tags to search, default value '라이브 아트', '아트'
-  searchTags?: string[]
 }
 
 export interface OnlineUser {
