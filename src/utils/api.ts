@@ -98,15 +98,7 @@ export default class Api {
   }
 
   async searchLives(tags: string[]) {
-    const livesArray = await tags.reduce(async (acc, tag) => {
-      const responses = await acc
-
-      const res = await this.getOnlineUserByTag(tag)
-      responses.push(...res)
-      await helper.wait(10)
-
-      return responses
-    }, Promise.resolve([]) as Promise<LiveExtend[]>)
+    const livesArray = await Promise.all(tags.map((tag) => this.getOnlineUserByTag(tag)))
 
     const liveMap = livesArray.flat().reduce((map, live) => {
       map.set(live.channelId, live)
