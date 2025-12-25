@@ -76,6 +76,66 @@ export default class Main {
 
     helper.msg(msg)
   }
+
+  async getOnlineUsers(channelIds: string[]) {
+    const livesToRecord: [LiveDetail, UserSetting][] = []
+
+    for (const channelId of channelIds) {
+      try {
+        const streamUrl = this.api.getSourceUrl(channelId)
+
+        const recordingUser = this.model.recordingList[channelId]
+
+        if (recordingUser) {
+          this.onlineUserMessage(recordingUser, channelId)
+          continue
+        }
+
+        const user = this.model.userList[channelId]
+        const { disableRecord, enableAutoDownloadVod } = user
+
+        if (!user) continue
+        if (disableRecord && !enableAutoDownloadVod) continue
+
+        // 如果該頻道正在實況，就沒有必要再檢查
+        if (this.artLiveChannelIdSet.has(channelId)) continue
+
+        const res = await this.api.getLiveDetail(channelId)
+
+        await helper.wait(this.SUB_PROCESS_API_REQUEST_TIME)
+
+        if (!res || res.status !== 'OPEN') continue
+
+        // 如果是不合法的實況類型 略過該實況，主程序只有檢查藝術 tag，所以不用判斷
+        if (!user.skipCategoryCheck && this.isInvalidLiveCategory(user.allowCategory, res.liveCategory)) {
+          helper.msg(`Stop record ${user.username} due to Invalid Category ${res.liveCategory}. url: ${streamUrl}`)
+          continue
+        }
+
+        if (user.disableRecord) {
+          helper.msg(`Stop recording ${user.username} due to configuration. url: ${streamUrl}`)
+          continue
+        }
+
+        livesToRecord.push([res, user])
+      } catch (error) {
+        const err = error as ErrorItem
+
+        const errors = [err?.message, err.cause?.message].filter((e): e is string => Boolean(e))
+        if (errors.some((err) => failMsg.includes(err))) {
+          continue
+        }
+
+        console.error(error)
+      }
+    }
+
+    return livesToRecord
+  }
+
+  handleUserRecording(livesToRecord: [LiveDetail, UserSetting][]) {
+    livesToRecord.forEach((item) => this.recorder.recordLiveStream(...item))
+  }
   // #endregion
 
   //#region 斷線處理
@@ -127,7 +187,18 @@ export default class Main {
 
     this.artLives = lives
 
-    await Promise.all([this.mpHandleVodCheck(lives), this.mpHandleUserRecording(lives)])
+    await Promise.all([this.mpHandleVodCheck(lives), this.mpHandleCheckLiveUsers(), this.mpHandleUserRecording(lives)])
+  }
+
+  get idsToCheckInMp() {
+    return Object.values(this.model.userList)
+      .filter((user) => !!user.checkLiveByMainProcess)
+      .map((i) => i.channelId)
+  }
+
+  async mpHandleCheckLiveUsers() {
+    const livesToRecord = await this.getOnlineUsers(this.idsToCheckInMp)
+    this.handleUserRecording(livesToRecord)
   }
 
   async mpHandleVodCheck(lives: LiveExtend[]) {
@@ -194,88 +265,38 @@ export default class Main {
   }
 
   async searchUsersById() {
-    const { livesToRecord, onlineChannelIds } = await this.getUsersById()
+    const livesToRecord = await this.getUsersById()
 
-    await Promise.all([this.spHandleUserRecording(livesToRecord), this.spHandleVodCheck(onlineChannelIds)])
+    await Promise.all([this.handleUserRecording(livesToRecord), this.spHandleVodCheck(this.onlineChannelIds)])
   }
 
   get artLiveChannelIdSet() {
     return this.artLives.reduce((set, cur) => set.add(cur.channelId), new Set<string>())
   }
 
+  get onlineChannelIds() {
+    return Object.keys(this.model.recordingList)
+  }
+
   async getUsersById() {
     const { proactiveSearch } = this.model.appSetting
 
-    const onlineChannelIds: string[] = []
-    const livesToRecord: [LiveDetail, UserSetting][] = []
-
     if (!proactiveSearch) {
       helper.msg('skip sub process due to false value of proactiveSearch')
-      return { onlineChannelIds, livesToRecord }
+      return []
     }
 
-    for (const channelId of Object.keys(this.model.userList)) {
-      try {
-        const streamUrl = this.api.getSourceUrl(channelId)
+    const channelIds = Object.values(this.model.userList)
+      .filter((user) => !user.checkLiveByMainProcess)
+      .map((i) => i.channelId)
 
-        const recordingUser = this.model.recordingList[channelId]
+    const livesToRecord = await this.getOnlineUsers(channelIds)
 
-        if (recordingUser) {
-          onlineChannelIds.push(channelId)
-
-          this.onlineUserMessage(recordingUser, channelId)
-          continue
-        }
-
-        const user = this.model.userList[channelId]
-        const { disableRecord, enableAutoDownloadVod } = user
-
-        if (!user) continue
-        if (disableRecord && !enableAutoDownloadVod) continue
-
-        // 如果該頻道正在實況，就沒有必要再檢查
-        if (this.artLiveChannelIdSet.has(channelId)) continue
-
-        const res = await this.api.getLiveDetail(channelId)
-
-        await helper.wait(this.SUB_PROCESS_API_REQUEST_TIME)
-
-        if (!res || res.status !== 'OPEN') continue
-
-        // 如果是不合法的實況類型 略過該實況，主程序只有檢查藝術 tag，所以不用判斷
-        if (!user.skipCategoryCheck && this.isInvalidLiveCategory(user.allowCategory, res.liveCategory)) {
-          helper.msg(`Stop record ${user.username} due to Invalid Category ${res.liveCategory}. url: ${streamUrl}`)
-          continue
-        }
-
-        if (user.disableRecord) {
-          helper.msg(`Stop recording ${user.username} due to configuration. url: ${streamUrl}`)
-          continue
-        }
-
-        livesToRecord.push([res, user])
-        onlineChannelIds.push(channelId)
-      } catch (error) {
-        const err = error as ErrorItem
-
-        const errors = [err?.message, err.cause?.message].filter((e): e is string => Boolean(e))
-        if (errors.some((err) => failMsg.includes(err))) {
-          continue
-        }
-
-        console.error(error)
-      }
-    }
-
-    return { livesToRecord, onlineChannelIds }
+    return livesToRecord
   }
 
   async spHandleVodCheck(onlineChannelIds: string[]) {
     this.liveVod.checkUseLiveStatus(onlineChannelIds, 'sub')
-  }
-
-  spHandleUserRecording(livesToRecord: [LiveDetail, UserSetting][]) {
-    livesToRecord.forEach((item) => this.recorder.recordLiveStream(...item))
   }
 
   async subProcess() {

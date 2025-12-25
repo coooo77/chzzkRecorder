@@ -13,6 +13,8 @@ export interface UserSettingConstructor {
   manualCheckVod?: boolean
   // extra tags for searching users, skipping stream once users are streaming
   searchTags?: string[]
+  // check live by main process
+  checkLiveByMainProcess?: boolean
 }
 
 export class UserSetting {
@@ -22,12 +24,14 @@ export class UserSetting {
   searchTags?: string[]
   manualCheckVod?: boolean
   skipCategoryCheck?: boolean
+  checkLiveByMainProcess?: boolean
   disableRecord?: boolean = true
   enableAutoDownloadVod?: boolean = false
   allowCategory: string[] = ['Live_Art', 'art']
 
   constructor(setting: UserSettingConstructor) {
-    const { username, channelId, channelName, disableRecord, allowCategory, enableAutoDownloadVod, manualCheckVod, searchTags } = setting
+    const { username, channelId, channelName, disableRecord, allowCategory, enableAutoDownloadVod, manualCheckVod, searchTags, checkLiveByMainProcess } =
+      setting
 
     this.username = username
     this.channelId = channelId
@@ -37,6 +41,7 @@ export class UserSetting {
     if (Array.isArray(allowCategory)) this.allowCategory = allowCategory
     if (manualCheckVod !== undefined) this.manualCheckVod = manualCheckVod
     if (enableAutoDownloadVod !== undefined) this.enableAutoDownloadVod = enableAutoDownloadVod
+    if (checkLiveByMainProcess !== undefined) this.checkLiveByMainProcess = checkLiveByMainProcess
   }
 }
 
