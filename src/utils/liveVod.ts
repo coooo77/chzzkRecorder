@@ -159,10 +159,48 @@ export default class LiveVod {
     await this.model.setVodDownloadList(items)
   }
 
-  get ableDownloadCount() {
-    const limit = this.model.appSetting.dlVodConcurrency || 1
-    return limit - this.DOWNLOADING_ITEMS_COUNT
+  // #region VOD 下載數量計算
+  isScheduleMatched(now: DateTime, start: DateTime, end: DateTime) {
+    if (start <= end) {
+      // 一般情況：00:00 -> 06:00
+      return now >= start && now <= end
+    } else {
+      // 跨子夜情況：22:00 -> 04:00
+      // 只要「現在」大於開始時間 OR 小於結束時間即符合
+      return now >= start || now <= end
+    }
   }
+
+  get concurrencyLimit() {
+    const { dlVodConcurrency, dlVodConcurrencySchedule } = this.model.appSetting
+
+    const defaultConcurrency = dlVodConcurrency || 1
+    if (!Array.isArray(dlVodConcurrencySchedule)) return defaultConcurrency
+
+    const now = DateTime.now()
+
+    const matchedSchedule = dlVodConcurrencySchedule.find(({ timeStart, timeEnd }) => {
+      try {
+        const start = DateTime.fromFormat(timeStart, 'HH:mm')
+        if (!start.isValid) throw Error(`fail to formate start time, value: ${timeStart}`)
+
+        const end = DateTime.fromFormat(timeEnd, 'HH:mm')
+        if (!end.isValid) throw Error(`fail to formate end time, value: ${timeEnd}`)
+
+        return this.isScheduleMatched(now, start, end)
+      } catch (error) {
+        helper.msg(`Error occurred from getting dlVodConcurrencySchedule ${String(error)}`, 'error')
+
+        return false
+      }
+    })
+
+    return matchedSchedule ? matchedSchedule.concurrency : defaultConcurrency
+  }
+  get ableDownloadCount() {
+    return this.concurrencyLimit - this.DOWNLOADING_ITEMS_COUNT
+  }
+  // #endregion
 
   async downloadVodList() {
     if (this.ableDownloadCount <= 0) return

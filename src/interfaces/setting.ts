@@ -50,6 +50,12 @@ export interface PuppeteerSetting {
   executablePath: string
 }
 
+export interface DownloadVodConcurrencySchedule {
+  timeStart: string
+  timeEnd: string
+  concurrency: number
+}
+
 export interface AppSettings {
   checkIntervalSec: number
   filenameTemplate: string
@@ -65,6 +71,8 @@ export interface AppSettings {
   proactiveSearch?: boolean
   // download n vod videos at same time
   dlVodConcurrency?: number
+  // download n vod videos by schedule
+  dlVodConcurrencySchedule?: DownloadVodConcurrencySchedule[]
   // check user vod video interval
   checkUserVodMinutes?: number[]
   // overwrite user base setting

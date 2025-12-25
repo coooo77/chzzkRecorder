@@ -10,6 +10,18 @@
   "proactiveSearch": true,
   "useLiveFFmpegOutput": true,
   "dlVodConcurrency": 2,
+  "dlVodConcurrencySchedule": [
+    {
+      "timeStart": "15:45",
+      "timeEnd": "23:00",
+      "concurrency": 4
+    },
+    {
+      "timeStart": "23:01",
+      "timeEnd": "07:00",
+      "concurrency": 10
+    }
+  ],
   "checkUserVodMinutes": [
     60,
     360,
