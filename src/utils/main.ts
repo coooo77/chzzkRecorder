@@ -182,12 +182,19 @@ export default class Main {
   //#endregion
 
   //#region 主程序 檢查 tag
-  async checkUsersByStreamTag() {
-    const lives = await this.api.searchLives(this.model.searchTags)
+  async checkUsers() {
+    const [artLives, noneArtLives] = await Promise.all([this.api.searchLives(this.model.searchTags), await this.mpHandleCheckLiveUsers()])
 
-    this.artLives = lives
+    this.artLives = artLives
 
-    await Promise.all([this.mpHandleVodCheck(lives), this.mpHandleCheckLiveUsers(), this.mpHandleUserRecording(lives)])
+    const validArtLiveChannelIds = artLives.filter((i) => !!this.model.userList[i.channelId]).map((i) => i.channelId)
+    const validNoneArtLiveChannelIds = noneArtLives
+      .map((i) => i[1])
+      .filter((i) => !!this.model.userList[i.channelId])
+      .map((i) => i.channelId)
+    const validIds = Array.from(new Set([...validArtLiveChannelIds, ...validNoneArtLiveChannelIds]))
+
+    await Promise.all([this.mpHandleVodCheck(validIds), this.mpHandleUserRecording(artLives)])
   }
 
   get idsToCheckInMp() {
@@ -199,10 +206,10 @@ export default class Main {
   async mpHandleCheckLiveUsers() {
     const livesToRecord = await this.getOnlineUsers(this.idsToCheckInMp)
     this.handleUserRecording(livesToRecord)
+    return livesToRecord
   }
 
-  async mpHandleVodCheck(lives: LiveExtend[]) {
-    const onlineUserChannelIds = lives.filter((i) => !!this.model.userList[i.channelId]).map((i) => i.channelId)
+  async mpHandleVodCheck(onlineUserChannelIds: string[]) {
     await this.liveVod.checkUseLiveStatus(onlineUserChannelIds, 'main')
   }
 
@@ -247,7 +254,7 @@ export default class Main {
 
         if (!this.model.cookieIsAvailable) helper.msg('no cookie available', 'warn')
 
-        await this.checkUsersByStreamTag()
+        await this.checkUsers()
       },
       'Main Process',
       this.model.appSetting.checkIntervalSec
