@@ -77,13 +77,30 @@ export default class Main {
     helper.msg(msg)
   }
 
+  getUsersToRecord(liveUsers: Awaited<ReturnType<typeof this.getOnlineUsers>>) {
+    return liveUsers.filter(([live, user]) => {
+      const streamUrl = this.api.getSourceUrl(user.channelId)
+
+      // 如果是不合法的實況類型 略過該實況，主程序只有檢查藝術 tag，所以不用判斷
+      if (!user.skipCategoryCheck && this.isInvalidLiveCategory(user.allowCategory, live.liveCategory)) {
+        helper.msg(`Stop record ${user.username} due to Invalid Category ${live.liveCategory}. url: ${streamUrl}`)
+        return false
+      }
+
+      if (user.disableRecord) {
+        helper.msg(`Stop recording ${user.username} due to configuration. url: ${streamUrl}`)
+        return false
+      }
+
+      return true
+    })
+  }
+
   async getOnlineUsers(channelIds: string[]) {
     const livesToRecord: [LiveDetail, UserSetting][] = []
 
     for (const channelId of channelIds) {
       try {
-        const streamUrl = this.api.getSourceUrl(channelId)
-
         const recordingUser = this.model.recordingList[channelId]
 
         if (recordingUser) {
@@ -106,17 +123,6 @@ export default class Main {
 
         if (!res || res.status !== 'OPEN') continue
 
-        // 如果是不合法的實況類型 略過該實況，主程序只有檢查藝術 tag，所以不用判斷
-        if (!user.skipCategoryCheck && this.isInvalidLiveCategory(user.allowCategory, res.liveCategory)) {
-          helper.msg(`Stop record ${user.username} due to Invalid Category ${res.liveCategory}. url: ${streamUrl}`)
-          continue
-        }
-
-        if (user.disableRecord) {
-          helper.msg(`Stop recording ${user.username} due to configuration. url: ${streamUrl}`)
-          continue
-        }
-
         livesToRecord.push([res, user])
       } catch (error) {
         const err = error as ErrorItem
@@ -135,6 +141,20 @@ export default class Main {
 
   handleUserRecording(livesToRecord: [LiveDetail, UserSetting][]) {
     livesToRecord.forEach((item) => this.recorder.recordLiveStream(...item))
+  }
+
+  get idsToCheck() {
+    return Object.values(this.model.userList).reduce(
+      (acc, user) => {
+        if (user.checkLiveByMainProcess) {
+          acc.main.push(user.channelId)
+        } else {
+          acc.sub.push(user.channelId)
+        }
+        return acc
+      },
+      { main: [], sub: [] } as { main: string[]; sub: string[] }
+    )
   }
   // #endregion
 
@@ -197,16 +217,11 @@ export default class Main {
     await Promise.all([this.mpHandleVodCheck(validIds), this.mpHandleUserRecording(artLives)])
   }
 
-  get idsToCheckInMp() {
-    return Object.values(this.model.userList)
-      .filter((user) => !!user.checkLiveByMainProcess)
-      .map((i) => i.channelId)
-  }
-
   async mpHandleCheckLiveUsers() {
-    const livesToRecord = await this.getOnlineUsers(this.idsToCheckInMp)
-    this.handleUserRecording(livesToRecord)
-    return livesToRecord
+    const onlineUsers = await this.getOnlineUsers(this.idsToCheck.main)
+    const usersToRecord = this.getUsersToRecord(onlineUsers)
+    this.handleUserRecording(usersToRecord)
+    return onlineUsers
   }
 
   async mpHandleVodCheck(onlineUserChannelIds: string[]) {
@@ -272,7 +287,7 @@ export default class Main {
   }
 
   async searchUsersById() {
-    const livesToRecord = await this.getUsersById()
+    const livesToRecord = await this.getUsersToRecordById()
 
     await Promise.all([this.handleUserRecording(livesToRecord), this.spHandleVodCheck(this.onlineChannelIds)])
   }
@@ -285,7 +300,7 @@ export default class Main {
     return Object.keys(this.model.recordingList)
   }
 
-  async getUsersById() {
+  async getUsersToRecordById() {
     const { proactiveSearch } = this.model.appSetting
 
     if (!proactiveSearch) {
@@ -293,13 +308,10 @@ export default class Main {
       return []
     }
 
-    const channelIds = Object.values(this.model.userList)
-      .filter((user) => !user.checkLiveByMainProcess)
-      .map((i) => i.channelId)
+    const onlineUsers = await this.getOnlineUsers(this.idsToCheck.sub)
+    const usersToRecord = this.getUsersToRecord(onlineUsers)
 
-    const livesToRecord = await this.getOnlineUsers(channelIds)
-
-    return livesToRecord
+    return usersToRecord
   }
 
   async spHandleVodCheck(onlineChannelIds: string[]) {
