@@ -28,6 +28,15 @@ export default class VodController {
         .map(Vod.getVodId)
         .filter((vodNum) => !this.model.vodDownloadList[vodNum])
 
+      if (vodNumbers.length === 0) {
+        return res.status(400).json(
+          new ServerResponse({
+            result: false,
+            message: 'all of vod have been added',
+          })
+        )
+      }
+
       const vodItems: VideoWithIsAdult[] = []
 
       for (const num of vodNumbers) {
