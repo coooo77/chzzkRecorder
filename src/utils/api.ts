@@ -98,20 +98,29 @@ export default class Api {
   }
 
   async searchLives(tags: string[]) {
-    const livesArray = await Promise.all(tags.map((tag) => this.getOnlineUserByTag(tag)))
+    try {
+      const livesArray = await Promise.all(tags.map((tag) => this.getOnlineUserByTag(tag)))
 
-    const liveMap = livesArray.flat().reduce((map, live) => {
-      map.set(live.channelId, live)
-      return map
-    }, new Map<UserSetting['channelId'], LiveExtend>())
+      const liveMap = livesArray.flat().reduce((map, live) => {
+        map.set(live.channelId, live)
+        return map
+      }, new Map<UserSetting['channelId'], LiveExtend>())
 
-    return Array.from(liveMap.values())
+      return Array.from(liveMap.values())
+    } catch (error) {
+      helper.msg(String(error), 'error')
+      return []
+    }
   }
 
   async getLiveDetail(channelId: string) {
-    const res = await this.chzzk.live.detail(channelId)
-
-    return res
+    try {
+      const res = await this.chzzk.live.detail(channelId)
+      return res
+    } catch (error) {
+      helper.msg(String(error), 'error')
+      return null
+    }
   }
 
   async getVod(vodNum: number) {
@@ -121,7 +130,7 @@ export default class Api {
       const vod = json['content'] ?? null
       return vod
     } catch (error) {
-      console.error(error)
+      helper.msg(String(error), 'error')
       helper.msg(`fail to get vod from vod number ${vodNum}`, 'error')
       return null
     }
@@ -134,7 +143,7 @@ export default class Api {
       const vod = json['content']?.data || null
       return vod
     } catch (error) {
-      console.error(error)
+      helper.msg(String(error), 'error')
       helper.msg(`fail to get videos from channel ${channelId}`, 'error')
       return null
     }
@@ -151,30 +160,35 @@ export default class Api {
   }
 
   async refreshSession() {
-    if (this.model.isDisableRefreshAuth) {
-      helper.msg('Reach refresh auth cookie limit', 'warn')
+    try {
+      if (this.model.isDisableRefreshAuth) {
+        helper.msg('Reach refresh auth cookie limit', 'warn')
+        return null
+      }
+
+      if (!this.hasAuthAndSession()) return null
+
+      const res = await fetch(`${this.gameBaseUrl}/v1/user/getUserStatus`, {
+        headers: this.headerWithAuth,
+      })
+
+      const setCookie = res.headers.get('set-cookie')
+      if (!setCookie) {
+        this.model.refreshAuthFailCount++
+        throw Error('no set-cookie header available in response of getUserStatus')
+      }
+
+      const { NID_SES } = cookie.parse(setCookie)
+      if (!NID_SES) {
+        this.model.refreshAuthFailCount++
+        throw Error('no session in response of getUserStatus')
+      }
+
+      return NID_SES
+    } catch (error) {
+      helper.msg(String(error), 'error')
       return null
     }
-
-    if (!this.hasAuthAndSession()) return null
-
-    const res = await fetch(`${this.gameBaseUrl}/v1/user/getUserStatus`, {
-      headers: this.headerWithAuth,
-    })
-
-    const setCookie = res.headers.get('set-cookie')
-    if (!setCookie) {
-      this.model.refreshAuthFailCount++
-      throw Error('no set-cookie header available in response of getUserStatus')
-    }
-
-    const { NID_SES } = cookie.parse(setCookie)
-    if (!NID_SES) {
-      this.model.refreshAuthFailCount++
-      throw Error('no session in response of getUserStatus')
-    }
-
-    return NID_SES
   }
 
   async getFollowingLiveChannel() {

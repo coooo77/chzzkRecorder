@@ -69,6 +69,7 @@ export default class RecordController {
 
         try {
           const res = await this.api.getLiveDetail(channelId)
+          if (!res) continue
 
           const isStreaming = res?.status === 'OPEN'
 

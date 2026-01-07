@@ -11,7 +11,8 @@ export default {
   async saveErrorLog(error: unknown, extraInfo?: any) {
     const message = error instanceof Error ? error.message : String(error)
     const stack = error instanceof Error ? error.stack : null
-    await fs.writeFile(path.join(`./error-log-${Date.now()}.json`), JSON.stringify({ message, stack, extraInfo }, undefined, 2))
+    const time = new Date().toLocaleString()
+    await fs.writeFile(path.join(`./error-log-${Date.now()}.json`), JSON.stringify({ message, stack, extraInfo, time }, undefined, 2))
   },
 
   msg(msg: string, msgType: LogMsgType = 'info') {
