@@ -134,7 +134,13 @@ export default class LiveVod {
         continue
       }
 
-      const { channelId, lastVodNumber } = vodCheckItem
+      const { channelId } = vodCheckItem
+      if (!channelId) {
+        helper.msg(`can not find vod channelId, channel id: ${channelId}`, 'error')
+        continue
+      }
+
+      const lastVodNumber = this.model.lastVodIdList[channelId] || null
 
       const videos = await this.api.getVideos(channelId)
 
