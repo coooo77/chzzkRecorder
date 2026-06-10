@@ -1,5 +1,4 @@
 'use strict'
-import fs from 'fs'
 import { DateTime } from 'luxon'
 import { pickBy } from 'lodash-es'
 
@@ -241,10 +240,10 @@ export default class LiveVod {
     }
 
     const filePath = this.recorder.getVodFilePath(item)
-    if (!fs.existsSync(filePath)) {
-      helper.msg(`can not find vod ${item.vodUrl} to check duration!`, 'error')
+    if (!helper.checkFileExists(filePath)) {
+      helper.msg(`can not find vod ${item.vodUrl} or file is empty to check duration!`, 'error')
     } else {
-      const videoDuration = ffmpeg.getMediaDuration(filePath)
+      const videoDuration = await ffmpeg.getMediaDuration(filePath, this.model.appSetting.ffprobe)
       const isSuccess = item.duration - videoDuration <= this.VALID_DURATION
 
       if (isSuccess) {

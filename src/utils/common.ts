@@ -1,8 +1,9 @@
 'use strict'
 
+import fs from 'fs'
 import path from 'path'
 import chalk from 'chalk'
-import fs from 'fs/promises'
+import fsPromises from 'fs/promises'
 
 /** types */
 import { LogMsgType } from '../interfaces/common.js'
@@ -12,7 +13,20 @@ export default {
     const message = error instanceof Error ? error.message : String(error)
     const stack = error instanceof Error ? error.stack : null
     const time = new Date().toLocaleString()
-    await fs.writeFile(path.join(`./error-log-${Date.now()}.json`), JSON.stringify({ message, stack, extraInfo, time }, undefined, 2))
+    await fsPromises.writeFile(path.join(`./error-log-${Date.now()}.json`), JSON.stringify({ message, stack, extraInfo, time }, undefined, 2))
+  },
+
+  checkFileExists(filePath?: string): boolean {
+    if (!filePath) return false
+    try {
+      if (fs.existsSync(filePath)) {
+        const stats = fs.statSync(filePath)
+        return stats.size > 0
+      }
+    } catch (error) {
+      // ignore
+    }
+    return false
   },
 
   msg(msg: string, msgType: LogMsgType = 'info') {

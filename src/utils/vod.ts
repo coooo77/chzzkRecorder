@@ -1,4 +1,3 @@
-import fs from 'fs'
 import path from 'path'
 import PQueue from 'p-queue'
 
@@ -106,12 +105,16 @@ export default class DownloadVod {
 
   async onDownloadVodEnd(item: VodDownloadItem) {
     const vod = this.vodDownloadList[item.vodNum]
+    if (!vod) {
+      helper.msg(`no vod info from vod id ${item.vodNum}, channel:${item.channelId}`, 'error')
+      return
+    }
 
     const filePath = this.recorder.getVodFilePath(item)
-    if (!fs.existsSync(filePath)) {
-      helper.msg(`can not find vod ${item.vodUrl} to check duration!`, 'error')
+    if (!helper.checkFileExists(filePath)) {
+      helper.msg(`can not find vod ${item.vodUrl} or file is empty to check duration!`, 'error')
     } else {
-      const videoDuration = ffmpeg.getMediaDuration(filePath)
+      const videoDuration = await ffmpeg.getMediaDuration(filePath, this.model.appSetting.ffprobe)
       const isSuccess = item.duration - videoDuration <= this.VALID_DURATION
       if (isSuccess) vod.status = 'success'
     }
