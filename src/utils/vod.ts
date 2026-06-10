@@ -4,7 +4,6 @@ import PQueue from 'p-queue'
 import helper from './common.js'
 import ffmpeg from './ffmpeg.js'
 import fileSys from './fileSys.js'
-import { RecordEvent } from './recorder.js'
 
 import Api from './api.js'
 import Model from './model.js'
@@ -128,10 +127,6 @@ export default class DownloadVod {
     await this.saveVodDownloadList(this.vodDownloadList)
   }
 
-  listenRecordEvents() {
-    this.recorder.on(RecordEvent.DOWNLOAD_VOD_END, (...arg) => this.onDownloadVodEnd(...arg))
-    this.recorder.on(RecordEvent.DOWNLOAD_VOD_START, (...arg) => this.onDownloadVodStart(...arg))
-  }
   //#endregion
 
   // #region 方法
@@ -139,7 +134,10 @@ export default class DownloadVod {
     let isProcessing = true
 
     do {
+      await this.onDownloadVodStart(item)
       await this.recorder.recordVOD(item)
+      await this.onDownloadVodEnd(item)
+
       isProcessing = this.vodDownloadList[item.vodNum]?.status === 'ongoing'
       await helper.wait(3)
     } while (isProcessing)
@@ -150,7 +148,6 @@ export default class DownloadVod {
   async start() {
     helper.msg('Start DownloadVod')
 
-    this.listenRecordEvents()
     await this.model.init()
     await this.model.syncModel()
     this.vodDownloadList = await this.getVodDownloadList()

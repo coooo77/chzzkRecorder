@@ -16,8 +16,6 @@ import type { UserSetting, VideoWithIsAdult, VodDownloadItem } from '../interfac
 export enum RecordEvent {
   RECORD_LIVE_START = 'record-live-start',
   RECORD_LIVE_END = 'record-live-end',
-  DOWNLOAD_VOD_END = 'download-vod-end',
-  DOWNLOAD_VOD_START = 'download-vod-start',
 }
 
 type Pid = number | undefined
@@ -28,8 +26,6 @@ type Pid = number | undefined
  * @see https://stackoverflow.com/questions/67243592/typescript-adding-types-to-eventemitter
  */
 interface EventMap {
-  [RecordEvent.DOWNLOAD_VOD_END]: [VodDownloadItem]
-  [RecordEvent.DOWNLOAD_VOD_START]: [VodDownloadItem]
   [RecordEvent.RECORD_LIVE_END]: [UserSetting]
   [RecordEvent.RECORD_LIVE_START]: [UserSetting, Pid]
 }
@@ -193,12 +189,10 @@ export default class Record extends EventEmitter<EventMap> {
 
         const spawnFn = () => {
           helper.msg(`start to download vod ${item.vodUrl}`)
-          this.emit(RecordEvent.DOWNLOAD_VOD_START, item)
         }
 
         const closeFn = () => {
           helper.msg(`vod ${item.vodUrl} downloaded`)
-          this.emit(RecordEvent.DOWNLOAD_VOD_END, item)
 
           task?.off('spawn', spawnFn)
           task?.off('close', closeFn)

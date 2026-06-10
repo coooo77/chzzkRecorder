@@ -8,7 +8,6 @@ import helper from './common.js'
 import ffmpeg from './ffmpeg.js'
 import Recorder from './recorder.js'
 
-import { RecordEvent } from './recorder.js'
 import type { VodCheckInfo } from '../interfaces/liveVod.js'
 import type { VodDownloadItem } from '../interfaces/setting.js'
 import type { VideoWithIsAdult } from '../interfaces/common.js'
@@ -37,8 +36,6 @@ export default class LiveVod {
     this.api = api
     this.model = model
     this.recorder = recorder
-
-    this.listenRecordEvents()
   }
 
   // #region 更新下載項目
@@ -217,7 +214,10 @@ export default class LiveVod {
 
     const { vodNum } = item
     do {
+      await this.onDownloadVodStart(this.model.vodDownloadList[vodNum])
       await this.recorder.recordVOD(this.model.vodDownloadList[vodNum])
+      await this.onDownloadVodEnd(this.model.vodDownloadList[vodNum])
+
       isProcessing = this.model.vodDownloadList[vodNum]?.status === 'ongoing'
       await helper.wait(3)
     } while (isProcessing)
@@ -226,7 +226,7 @@ export default class LiveVod {
   }
   // #endregion
 
-  // #region 事件監聽
+  // #region VOD 下載狀態處理
   async onDownloadVodStart(item: VodDownloadItem) {
     this.model.vodDownloadList[item.vodNum] = Object.assign(item, { status: 'ongoing' })
     await this.model.setVodDownloadList(Object.values(this.model.vodDownloadList))
@@ -264,11 +264,6 @@ export default class LiveVod {
     }
 
     await this.model.setVodDownloadList(Object.values(this.model.vodDownloadList))
-  }
-
-  listenRecordEvents() {
-    this.recorder.on(RecordEvent.DOWNLOAD_VOD_END, (...arg) => this.onDownloadVodEnd(...arg))
-    this.recorder.on(RecordEvent.DOWNLOAD_VOD_START, (...arg) => this.onDownloadVodStart(...arg))
   }
   // #endregion
 }
