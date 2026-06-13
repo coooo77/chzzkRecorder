@@ -202,6 +202,8 @@ export default class LiveVod {
 
     for (let i = 0; i < tasks.length; i++) {
       if (this.ableDownloadCount <= 0) break
+      if (!tasks[i]) continue
+
       this.DOWNLOADING_ITEMS_COUNT++
       this.vodDownloadTask(tasks[i])
     }
@@ -209,7 +211,12 @@ export default class LiveVod {
   // #endregion
 
   // #region 下載操作
-  async vodDownloadTask(item: VodDownloadItem) {
+  async vodDownloadTask(item?: VodDownloadItem) {
+    if (!item || typeof item.vodNum !== 'number') {
+      this.DOWNLOADING_ITEMS_COUNT--
+      return
+    }
+
     let isProcessing = true
 
     const { vodNum } = item
@@ -232,8 +239,13 @@ export default class LiveVod {
     await this.model.setVodDownloadList(Object.values(this.model.vodDownloadList))
   }
 
-  async onDownloadVodEnd(item: VodDownloadItem) {
-    const vod = this.model.vodDownloadList[item.vodNum]
+  async onDownloadVodEnd(item?: VodDownloadItem) {
+    if (!item) {
+      helper.msg(`no vod item found at end of download vod`, 'error')
+      return
+    }
+
+    const vod = this.model.vodDownloadList[item?.vodNum]
     if (!vod) {
       helper.msg(`no vod info from vod id ${item.vodNum}, channel:${item.channelId}`, 'error')
       return

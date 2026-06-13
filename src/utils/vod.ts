@@ -133,6 +133,8 @@ export default class DownloadVod {
   async vodDownloadTask(item: VodDownloadItem) {
     let isProcessing = true
 
+    if (!item) return
+
     do {
       await this.onDownloadVodStart(item)
       await this.recorder.recordVOD(item)
