@@ -150,10 +150,11 @@ export default class Record extends EventEmitter<EventMap> {
     return cmd
   }
 
-  getVodDownloadItem(vod: VideoWithIsAdult) {
+  getVodDownloadItem(vod: VideoWithIsAdult, options?: { skipCheck?: boolean }) {
+    const { skipCheck } = options || {}
     const vodNum = vod.videoNo
     const userSetting = this.model.userList[vod.channel.channelId]
-    const status = userSetting?.manualCheckVod ? 'check' : 'waiting'
+    const status = !skipCheck && userSetting?.manualCheckVod ? 'check' : 'waiting'
 
     const item: VodDownloadItem = {
       vodNum,

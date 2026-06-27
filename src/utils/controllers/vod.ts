@@ -12,7 +12,11 @@ import type { Request, Response } from 'express'
 import type { VideoWithIsAdult } from '../../interfaces/index.js'
 
 export default class VodController {
-  constructor(private api: Api, private recorder: Recorder, private model: Model) {}
+  constructor(
+    private api: Api,
+    private recorder: Recorder,
+    private model: Model,
+  ) {}
 
   addList = async (req: Request, res: Response) => {
     try {
@@ -33,7 +37,7 @@ export default class VodController {
           new ServerResponse({
             result: false,
             message: 'all of vod have been added',
-          })
+          }),
         )
       }
 
@@ -56,19 +60,19 @@ export default class VodController {
           new ServerResponse({
             result: false,
             message: 'no vod items available',
-          })
+          }),
         )
       }
 
       // 保存資料
-      const dlItems = vodItems.map((i) => this.recorder.getVodDownloadItem(i))
+      const dlItems = vodItems.map((i) => this.recorder.getVodDownloadItem(i, { skipCheck: true }))
       await this.model.setVodDownloadList(dlItems)
 
       return res.status(200).json(
         new ServerResponse({
           data: dlItems,
           result: true,
-        })
+        }),
       )
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -79,7 +83,7 @@ export default class VodController {
         new ServerResponse({
           message,
           result: false,
-        })
+        }),
       )
     }
   }
