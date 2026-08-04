@@ -236,6 +236,8 @@ export default class Main {
 
       if (!user) return acc
 
+      if (user.checkLiveByMainProcess) return acc
+
       const streamUrl = this.api.getSourceUrl(channelId)
 
       if (blindType) {
