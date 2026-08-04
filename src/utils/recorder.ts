@@ -39,6 +39,7 @@ interface RecordParams {
 export default class Record extends EventEmitter<EventMap> {
   api: Api
   model: Model
+  pendingRecordings = new Set<string>()
 
   constructor({ api, model, eventParam = [] }: RecordParams) {
     super(...eventParam)
@@ -89,41 +90,60 @@ export default class Record extends EventEmitter<EventMap> {
   }
 
   async recordLiveStream(liveInfo: LiveInfo, setting: UserSetting) {
-    if (this.model.recordingList[setting.channelId]) {
+    const channelId = setting.channelId
+
+    if (this.model.recordingList[channelId] || this.pendingRecordings.has(channelId)) {
       helper.msg(`user ${setting.username} is recording, abort record process`, 'warn')
       return
     }
 
-    if (liveInfo.adult && !(await this.api.isAbleToRecordAdult())) {
-      helper.msg(`Can not record ${setting.username}'s live stream due to adult content`)
-      return
+    this.pendingRecordings.add(channelId)
+
+    if (liveInfo.adult) {
+      try {
+        if (!(await this.api.isAbleToRecordAdult())) {
+          this.pendingRecordings.delete(channelId)
+          helper.msg(`Can not record ${setting.username}'s live stream due to adult content`)
+          return
+        }
+      } catch (error) {
+        this.pendingRecordings.delete(channelId)
+        throw error
+      }
     }
 
-    const cmd = this.getRecordLiveCmd(liveInfo, setting)
+    try {
+      const cmd = this.getRecordLiveCmd(liveInfo, setting)
 
-    let task: null | cp.ChildProcess = cp.spawn(`start cmd.exe /c "${cmd}"`, [], {
-      detached: true,
-      shell: true,
-    })
+      let task: null | cp.ChildProcess = cp.spawn(`start cmd.exe /c "${cmd}"`, [], {
+        detached: true,
+        shell: true,
+      })
 
-    const spawnFn = () => {
-      helper.msg(`start to record user ${setting.username}`)
-      this.emit(RecordEvent.RECORD_LIVE_START, setting, task?.pid)
+      const spawnFn = () => {
+        helper.msg(`start to record user ${setting.username}`)
+        this.emit(RecordEvent.RECORD_LIVE_START, setting, task?.pid)
+      }
+
+      const closeFn = () => {
+        helper.msg(`user ${setting.username} is offline`)
+
+        this.pendingRecordings.delete(channelId)
+        task?.off('spawn', spawnFn)
+        task?.off('close', closeFn)
+        task = null
+
+        this.emit(RecordEvent.RECORD_LIVE_END, setting)
+      }
+
+      task.on('spawn', spawnFn)
+
+      task.on('close', closeFn)
+      task.on('error', () => this.pendingRecordings.delete(channelId))
+    } catch (error) {
+      this.pendingRecordings.delete(channelId)
+      throw error
     }
-
-    const closeFn = () => {
-      helper.msg(`user ${setting.username} is offline`)
-
-      task?.off('spawn', spawnFn)
-      task?.off('close', closeFn)
-      task = null
-
-      this.emit(RecordEvent.RECORD_LIVE_END, setting)
-    }
-
-    task.on('spawn', spawnFn)
-
-    task.on('close', closeFn)
   }
   //#endregion
 
