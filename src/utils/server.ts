@@ -14,7 +14,9 @@ import type { Request, Response, NextFunction } from 'express'
 export default class CrawlerServer {
   app
 
-  port = 3000
+  port = 43127
+
+  private readonly maxListenAttempts = 5
 
   server?: Server
 
@@ -29,9 +31,56 @@ export default class CrawlerServer {
     this.app.use('/vod', vodRouter(this.vodController))
     this.app.use('/record', recordRouter(this.recordController))
 
-    this.server = this.app.listen(this.port, () => {
+    this.listen()
+  }
+
+  private listen(attempt = 1) {
+    const port = this.port
+    let server: Server
+
+    try {
+      server = this.app.listen(port)
+    } catch (error) {
+      this.handleListenError(error, attempt, port)
+      return
+    }
+
+    let isListening = false
+
+    server.once('listening', () => {
+      isListening = true
+      this.server = server
       helper.msg(`Express is running on http://localhost:${this.port}`)
     })
+
+    server.once('error', (error) => {
+      if (isListening) {
+        const errorMessage = error instanceof Error ? error.stack ?? error.message : String(error)
+        helper.msg(`Express server error: ${errorMessage}`, 'error')
+        return
+      }
+
+      server.close(() => this.handleListenError(error, attempt, port))
+    })
+  }
+
+  private handleListenError(error: unknown, attempt: number, failedPort: number) {
+    const errorMessage = error instanceof Error ? error.stack ?? error.message : String(error)
+    const errorCode = error instanceof Error ? (error as NodeJS.ErrnoException).code : undefined
+
+    if (errorCode !== 'EADDRINUSE') {
+      helper.msg(`Express failed to start on port ${failedPort}: ${errorMessage}`, 'error')
+      return
+    }
+
+    if (attempt >= this.maxListenAttempts) {
+      helper.msg(`Express failed to start after ${this.maxListenAttempts} attempts (last port: ${failedPort}): ${errorMessage}`, 'error')
+      return
+    }
+
+    this.port = failedPort + 1
+    helper.msg(`Express failed to start on port ${failedPort}; trying port ${this.port} (${attempt + 1}/${this.maxListenAttempts})`, 'warn')
+    this.listen(attempt + 1)
   }
   // #endregion
 
