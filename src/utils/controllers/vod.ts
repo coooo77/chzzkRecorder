@@ -2,10 +2,10 @@
 
 import helper from '../common.js'
 
-import Vod from '../vod.js'
 import Api from '../api.js'
 import Model from '../model.js'
 import Recorder from '../recorder.js'
+import { getVodId } from '../vodUtils.js'
 
 import { ServerResponse } from '../../interfaces/index.js'
 import type { Request, Response } from 'express'
@@ -29,7 +29,7 @@ export default class VodController {
       // 資料取得
       const vodNumbers = list
         .filter((i) => ['string', 'number'].includes(typeof i))
-        .map(Vod.getVodId)
+        .map(getVodId)
         .filter((vodNum) => !this.model.vodDownloadList[vodNum])
 
       if (vodNumbers.length === 0) {

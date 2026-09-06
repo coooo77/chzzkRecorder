@@ -9,7 +9,6 @@
     "dev": "npx tsx ./src/index.ts",
     "add": "node ./dist/addUser.js",
     "sort": "node ./dist/sortAddList.js",
-    "vod": "node ./dist/downloadVod.js",
     "start": "node dist/index"
   },
   "keywords": [],
@@ -33,7 +32,6 @@
     "find-process": "^1.4.10",
     "lodash-es": "^4.17.21",
     "luxon": "^3.6.0",
-    "p-queue": "^8.1.0",
     "puppeteer": "^22.5.0",
     "puppeteer-extra": "^3.3.6"
   }
