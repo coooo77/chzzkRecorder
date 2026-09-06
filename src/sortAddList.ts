@@ -18,7 +18,7 @@ const map = Object.entries(newUserList).reduce((acc, cur) => {
   return acc
 }, new Map<string, string>())
 
-const nameList = Object.values(newUserList).sort()
+const nameList = Object.values(newUserList).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
 
 const newMap = nameList.reduce((acc, username) => {
   const channelId = map.get(username)
