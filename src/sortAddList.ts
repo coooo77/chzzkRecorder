@@ -8,7 +8,7 @@ import fileSys from './utils/fileSys.js'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 const userListPath = path.resolve(__dirname, '..', 'addList.json')
-const newUserList = fileSys.getJSONFile<Record<string, string>>(userListPath)
+const newUserList = await fileSys.getJSONFile<Record<string, string>>(userListPath)
 
 if (!newUserList) process.exit(1)
 
@@ -28,6 +28,6 @@ const newMap = nameList.reduce((acc, username) => {
   return acc
 }, {} as Record<string, string>)
 
-fileSys.saveJSONFile(userListPath, newMap)
+await fileSys.saveJSONFile(userListPath, newMap)
 
 helper.msg(`${nameList.length} users sorted`)
