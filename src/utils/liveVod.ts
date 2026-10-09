@@ -132,7 +132,9 @@ export default class LiveVod {
       const videos = await this.api.getVideos(channelId)
 
       if (Array.isArray(videos) && videos.length) {
-        const vidsToDl = lastVodNumber === null ? videos : videos.filter((v) => v.videoNo > lastVodNumber)
+        const vidsToDl = videos.filter(
+          (v) => (lastVodNumber === null || v.videoNo > lastVodNumber) && !this.model.vodDownloadList[v.videoNo],
+        )
 
         // 找到可下載 VOD 不需再檢查相同類型的 VOD
         if (vidsToDl.length) {
