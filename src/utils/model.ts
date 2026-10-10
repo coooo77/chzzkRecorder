@@ -184,7 +184,7 @@ export default class Model extends EventEmitter<ModelEventMap> {
 
       list.forEach((channelId) => delete this.recordingList[channelId])
 
-      await this.setRecordList(this.recordingList)
+      await fileSys.saveJSONFile(fileSys.recordingListPath, this.recordingList)
     })
   }
 
@@ -199,7 +199,7 @@ export default class Model extends EventEmitter<ModelEventMap> {
         channelName: setting.channelName,
       }
 
-      await this.setRecordList(this.recordingList)
+      await fileSys.saveJSONFile(fileSys.recordingListPath, this.recordingList)
     })
   }
   //#endregion
@@ -216,11 +216,11 @@ export default class Model extends EventEmitter<ModelEventMap> {
   // #region 資料同步
   async init() {
     await Promise.all([
-      this.updateUserList(),
-      this.updateAppSetting(),
-      this.updateVodCheckList(),
-      this.updateLastVodIdList(),
-      this.updateVodDownloadList(),
+      this.retryUpdate(this.userList, fileSys.getUsersList.bind(fileSys), (payload) => (this.userList = payload), 'user list'),
+      this.retryUpdate(this.appSetting, fileSys.getAppSetting.bind(fileSys), (payload) => (this.appSetting = payload), 'app setting'),
+      this.retryUpdate(this.vodCheckList, fileSys.getVodCheckList.bind(fileSys), (payload) => (this.vodCheckList = payload), 'vod check list'),
+      this.retryUpdate(this.lastVodIdList, fileSys.getLastVodIdList.bind(fileSys), (payload) => (this.lastVodIdList = payload), 'last vod id list'),
+      this.retryUpdate(this.vodDownloadList, fileSys.getVodDownloadList.bind(fileSys), (payload) => (this.vodDownloadList = payload), 'vod download list'),
       this.updateCookie({ init: true }),
       this.getRecordingList({ init: true }),
       fileSys.makeDirIfNotExist(this.appSetting.saveDirectory),
@@ -341,14 +341,9 @@ export default class Model extends EventEmitter<ModelEventMap> {
 
   //#region 其他
   async addPromiseQueue<F extends (...arg: any[]) => any>(cb: F) {
-    this.mutex
-      .then(async () => {
-        const res = await cb()
-        return res
-      })
-      .catch(console.error)
-
-    return this.mutex as Promise<ReturnType<F>>
+    const task = this.mutex.then(cb)
+    this.mutex = task.then(() => undefined, () => undefined)
+    return task as Promise<ReturnType<F>>
   }
 
   async getAppSetting() {

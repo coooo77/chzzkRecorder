@@ -3,8 +3,10 @@ import fs from 'fs'
 import path from 'path'
 import cp from 'child_process'
 import EventEmitter from 'events'
+import { fileURLToPath } from 'url'
 
 import helper from './common.js'
+import fileSys from './fileSys.js'
 // import { ModelEvent } from './model.js'
 
 import Api from './api.js'
@@ -170,6 +172,16 @@ export default class Record extends EventEmitter<EventMap> {
     return cmd
   }
 
+  getVodTaskPaths(item: VodDownloadItem) {
+    const name = `${item.vodNum}-${item.runId}`
+    const dir = fileSys.vodTaskDir
+    return {
+      taskPath: path.resolve(dir, `${name}.task.json`),
+      startedPath: path.resolve(dir, `${name}.started.json`),
+      resultPath: path.resolve(dir, `${name}.result.json`),
+    }
+  }
+
   getVodDownloadItem(vod: VideoWithIsAdult, options?: { skipCheck?: boolean }) {
     const { skipCheck } = options || {}
     const vodNum = vod.videoNo
@@ -195,40 +207,26 @@ export default class Record extends EventEmitter<EventMap> {
 
   async recordVOD(item: VodDownloadItem) {
     if (item.adult && !(await this.api.isAbleToRecordAdult())) {
-      helper.msg(`Can not record ${item.username}'s live stream due to adult content`)
-      return
+      throw Error(`Can not record ${item.username}'s VOD due to adult content`)
     }
 
-    return new Promise<void>((res, rej) => {
-      try {
-        const cmd = this.getVodDownloadCmd(item)
+    const paths = this.getVodTaskPaths(item)
+    const interactive = process.platform === 'win32' && this.model.appSetting.showVodWindow !== false
+    await fileSys.saveJSONFile(paths.taskPath, { cmd: this.getVodDownloadCmd(item), interactive, ...paths })
 
-        let task: null | cp.ChildProcess = cp.spawn(cmd, [], {
-          detached: true,
-          shell: true,
-        })
-
-        const spawnFn = () => {
-          helper.msg(`start to download vod ${item.vodUrl}`)
-        }
-
-        const closeFn = () => {
-          helper.msg(`vod ${item.vodUrl} downloaded`)
-
-          task?.off('spawn', spawnFn)
-          task?.off('close', closeFn)
-          task = null
-
-          res()
-        }
-
-        task.on('spawn', spawnFn)
-        task.on('close', closeFn)
-      } catch (error) {
-        console.error(error)
-        rej()
-      }
+    const extension = import.meta.url.endsWith('.ts') ? 'ts' : 'js'
+    const workerPath = fileURLToPath(new URL(`./vodWorker.${extension}`, import.meta.url))
+    const args = extension === 'ts' ? ['--import', import.meta.resolve('tsx'), workerPath, paths.taskPath] : [workerPath, paths.taskPath]
+    const command = `start "VOD ${item.vodNum}" ${[process.execPath, ...args].map((i) => `"${i}"`).join(' ')}`
+    const task = interactive
+      ? cp.spawn(command, [], { shell: true, detached: true, stdio: 'ignore' })
+      : cp.spawn(process.execPath, args, { detached: true, stdio: 'ignore', windowsHide: true })
+    await new Promise<void>((resolve, reject) => {
+      task.once('spawn', resolve)
+      task.once('error', reject)
     })
+    task.unref()
+    helper.msg(`start to download vod ${item.vodUrl}`)
   }
   //#endregion
 }

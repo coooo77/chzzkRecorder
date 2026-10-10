@@ -11,6 +11,8 @@ import type { UsersList, AppSettings, RecordingList, VodCheckList, VodDownloadLi
 
 const fileSysOri = {
   //#region 檔案路徑
+  vodTaskDir: path.join('./model/vodTasks'),
+
   appConfigPath: path.join('./config.json'),
 
   cookiePath: path.join('./model/cookie.txt'),

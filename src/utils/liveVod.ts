@@ -1,11 +1,15 @@
 'use strict'
+import fs from 'fs/promises'
 import { DateTime } from 'luxon'
 import { pickBy } from 'lodash-es'
+import { randomUUID } from 'crypto'
+import findProcess from 'find-process'
 
 import Api from './api.js'
 import Model from './model.js'
 import helper from './common.js'
 import ffmpeg from './ffmpeg.js'
+import fileSys from './fileSys.js'
 import Recorder from './recorder.js'
 
 import type { VodCheckInfo } from '../interfaces/liveVod.js'
@@ -27,7 +31,6 @@ export default class LiveVod {
 
   MAX_RETRY_COUNT = 3
   VALID_DURATION = 60 * 2
-  DOWNLOADING_ITEMS_COUNT = 0
 
   liveUserIdList: LiveUserIdList = new Set()
   subProcessLiveUserIdList: LiveUserIdList = new Set()
@@ -132,9 +135,7 @@ export default class LiveVod {
       const videos = await this.api.getVideos(channelId)
 
       if (Array.isArray(videos) && videos.length) {
-        const vidsToDl = videos.filter(
-          (v) => (lastVodNumber === null || v.videoNo > lastVodNumber) && !this.model.vodDownloadList[v.videoNo],
-        )
+        const vidsToDl = videos.filter((v) => (lastVodNumber === null || v.videoNo > lastVodNumber) && !this.model.vodDownloadList[v.videoNo])
 
         // 找到可下載 VOD 不需再檢查相同類型的 VOD
         if (vidsToDl.length) {
@@ -193,11 +194,13 @@ export default class LiveVod {
     return matchedSchedule ? matchedSchedule.concurrency : defaultConcurrency
   }
   get ableDownloadCount() {
-    return this.concurrencyLimit - this.DOWNLOADING_ITEMS_COUNT
+    const ongoingCount = Object.values(this.model.vodDownloadList).filter((i) => i.status === 'ongoing').length
+    return this.concurrencyLimit - ongoingCount
   }
   // #endregion
 
   async downloadVodList() {
+    await this.checkOngoingVodList()
     if (this.ableDownloadCount <= 0) return
 
     const tasks = Object.values(pickBy(this.model.vodDownloadList, (i) => i.status === 'waiting'))
@@ -206,7 +209,6 @@ export default class LiveVod {
       if (this.ableDownloadCount <= 0) break
       if (!tasks[i]) continue
 
-      this.DOWNLOADING_ITEMS_COUNT++
       this.vodDownloadTask(tasks[i])
     }
   }
@@ -214,31 +216,62 @@ export default class LiveVod {
 
   // #region 下載操作
   async vodDownloadTask(item?: VodDownloadItem) {
-    if (!item || typeof item.vodNum !== 'number') {
-      this.DOWNLOADING_ITEMS_COUNT--
-      return
+    if (!item || typeof item.vodNum !== 'number') return
+
+    try {
+      await this.onDownloadVodStart(item)
+      await this.recorder.recordVOD(item)
+    } catch (error) {
+      helper.msg(`Failed to start vod ${item.vodNum}: ${String(error)}`, 'error')
+      await this.onDownloadVodEnd(item)
     }
-
-    let isProcessing = true
-
-    const { vodNum } = item
-    do {
-      await this.onDownloadVodStart(this.model.vodDownloadList[vodNum])
-      await this.recorder.recordVOD(this.model.vodDownloadList[vodNum])
-      await this.onDownloadVodEnd(this.model.vodDownloadList[vodNum])
-
-      isProcessing = this.model.vodDownloadList[vodNum]?.status === 'ongoing'
-      await helper.wait(3)
-    } while (isProcessing)
-
-    this.DOWNLOADING_ITEMS_COUNT--
   }
   // #endregion
 
   // #region VOD 下載狀態處理
+  async isVodProcessRunning(item: VodDownloadItem) {
+    const processes = await findProcess('name', 'streamlink')
+    return processes.some((process) => process.cmd.includes(item.vodUrl))
+  }
+
+  async isVodTaskRunning(item: VodDownloadItem, paths: ReturnType<Recorder['getVodTaskPaths']> | null) {
+    const started = paths ? await fileSys.getJSONFile<{ pid: number }>(paths.startedPath) : null
+    if (started && helper.isProcessRunning(started.pid)) return true
+    if (item.startedAt && Date.now() - item.startedAt < 15000) return true
+    return this.isVodProcessRunning(item)
+  }
+
+  async checkOngoingVodList() {
+    const items = Object.values(this.model.vodDownloadList).filter((i) => i.status === 'ongoing')
+
+    for (const item of items) {
+      const paths = item.runId ? this.recorder.getVodTaskPaths(item) : null
+      const result = paths ? await fileSys.getJSONFile<{ exitCode: number | null; paused?: boolean }>(paths.resultPath) : null
+      if (!result && (await this.isVodTaskRunning(item, paths))) continue
+
+      if (result?.paused) await this.onDownloadVodPause(item)
+      else await this.onDownloadVodEnd(item)
+      if (!paths) continue
+      await Promise.all(Object.values(paths).map((filePath) => fs.rm(filePath, { force: true })))
+    }
+  }
+
   async onDownloadVodStart(item: VodDownloadItem) {
-    this.model.vodDownloadList[item.vodNum] = Object.assign(item, { status: 'ongoing' })
+    this.model.vodDownloadList[item.vodNum] = Object.assign(item, {
+      status: 'ongoing',
+      runId: randomUUID(),
+      startedAt: Date.now(),
+    })
     await this.model.setVodDownloadList(Object.values(this.model.vodDownloadList))
+  }
+
+  async onDownloadVodPause(item: VodDownloadItem) {
+    const vod = this.model.vodDownloadList[item.vodNum]
+    if (!vod) return
+
+    vod.status = 'paused'
+    await this.model.setVodDownloadList(Object.values(this.model.vodDownloadList))
+    helper.msg(`Paused vod ${item.vodNum}`)
   }
 
   async onDownloadVodEnd(item?: VodDownloadItem) {
@@ -274,7 +307,7 @@ export default class LiveVod {
     if (vod.status !== 'success') {
       helper.msg(`Failed to download vod ${item.vodNum}`)
       vod.tryCount++
-      if (vod.tryCount >= this.MAX_RETRY_COUNT) vod.status = 'failed'
+      vod.status = vod.tryCount >= this.MAX_RETRY_COUNT ? 'failed' : 'waiting'
     }
 
     await this.model.setVodDownloadList(Object.values(this.model.vodDownloadList))

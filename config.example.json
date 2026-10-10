@@ -10,6 +10,7 @@
   "proactiveSearch": true,
   "useLiveFFmpegOutput": true,
   "dlVodConcurrency": 2,
+  "showVodWindow": true,
   "dlVodConcurrencySchedule": [
     {
       "timeStart": "15:45",

@@ -71,6 +71,8 @@ export interface AppSettings {
   proactiveSearch?: boolean
   // download n vod videos at same time
   dlVodConcurrency?: number
+  // show a console window for each VOD download
+  showVodWindow?: boolean
   // download n vod videos by schedule
   dlVodConcurrencySchedule?: DownloadVodConcurrencySchedule[]
   // check user vod video interval
@@ -98,6 +100,8 @@ export interface OnlineUser {
 
 export interface VodDownloadItem {
   pid?: number
+  runId?: string
+  startedAt?: number
   publishDate: string
   username: string
   channelId: string
@@ -107,7 +111,7 @@ export interface VodDownloadItem {
   tryCount: number
   adult: boolean
   cmd?: string
-  status: 'waiting' | 'ongoing' | 'success' | 'failed' | 'check'
+  status: 'waiting' | 'ongoing' | 'success' | 'failed' | 'check' | 'paused'
 }
 
 export type UsersList = Record<UserSetting['channelId'], UserSetting>
